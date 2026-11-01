@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AI 一起听</title>
+<style>
+  :root {
+    --bg0:#0b0d1a; --bg1:#151233; --bg2:#0f0c22;
+    --glass: rgba(255,255,255,.075);
+    --glass-strong: rgba(255,255,255,.11);
+    --stroke: rgba(255,255,255,.14);
+    --stroke-bright: rgba(255,255,255,.22);
+    --txt:#f4f5fb; --txt-dim:rgba(244,245,251,.6);
+    --accent:#5ea2ff; --accent2:#8b7bff; --pink:#ff7ab0;
+    --gold:#ffb340; --gold-txt:#ffd27a;
+    --red:#ff6b81;
+    --r-lg:26px; --r-md:18px; --r-sm:14px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+      "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+    color: var(--txt);
+    overflow-y:auto; -webkit-user-select:none; user-select:none;
+    letter-spacing:.1px;
+  }
+  #bg {
+    position: fixed; inset:0; z-index:-2;
+    background:
+      radial-gradient(720px 520px at 88% -8%, rgba(61,139,255,.5), transparent 68%),
+      radial-gradient(620px 460px at -12% 26%, rgba(124,77,255,.42), transparent 70%),
+      radial-gradient(540px 420px at 100% 88%, rgba(255,110,169,.32), transparent 72%),
+      linear-gradient(168deg, var(--bg1) 0%, var(--bg0) 52%, var(--bg2) 100%);
+  }
+  #bg::after {
+    content:""; position:absolute; inset:0; z-index:-1;
+    background: radial-gradient(120% 90% at 50% 0%, transparent 55%, rgba(0,0,0,.45) 100%);
+  }
+  .glass {
+    background: var(--glass);
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    border: 1px solid var(--stroke);
+    box-shadow: 0 18px 44px rgba(0,0,0,.32), inset 0 1px 0 rgba(255,255,255,.14);
+  }
+  .wrap { padding: 12px 16px 30px; display:flex; flex-direction:column; gap:14px; }
+  svg { display:block; }
+
+  #topbar { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:var(--r-lg); }
+  .iconbtn {
+    width:40px; height:40px; border-radius:50%; flex-shrink:0; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; color:var(--txt);
+    background: var(--glass-strong); border:1px solid var(--stroke-bright);
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .iconbtn:active { transform:scale(.92); filter:brightness(1.25); }
+  #ttl { flex:1; min-width:0; }
+  #ttl h1 { font-size:17px; font-weight:700; letter-spacing:.2px; }
+  #ttl p { font-size:12px; color:var(--txt-dim); margin-top:2px; }
+
+  #player { padding:18px; }
+  #prow { display:flex; align-items:center; gap:16px; }
+  #cover {
+    width:64px; height:64px; border-radius:20px; flex-shrink:0; color:rgba(255,255,255,.92);
+    display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(135deg,#2f6bff,#7c4dff 52%,#ff5da2);
+    box-shadow: 0 10px 24px rgba(80,90,255,.35), inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  #meta { flex:1; min-width:0; }
+  #name { display:flex; align-items:center; gap:8px; }
+  #songname { font-size:16px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #artist { font-size:12.5px; color:var(--txt-dim); margin-top:3px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #note { font-size:11.5px; color:var(--txt-dim); margin-top:3px; }
+  .vip {
+    font-size:10px; font-weight:800; color:var(--gold-txt); flex-shrink:0;
+    background: linear-gradient(135deg, rgba(255,179,0,.28), rgba(255,150,40,.24));
+    border:1px solid rgba(255,179,0,.5);
+    padding:2px 7px; border-radius:999px; letter-spacing:.4px;
+  }
+  #prog { margin-top:16px; }
+  #track { height:7px; border-radius:999px; background: rgba(255,255,255,.14);
+    position:relative; cursor:pointer; box-shadow: inset 0 1px 2px rgba(0,0,0,.25); }
+  #fill { position:absolute; left:0; top:0; bottom:0; width:0%; border-radius:999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2) 60%, var(--pink));
+    box-shadow: 0 0 12px rgba(94,162,255,.55); }
+  #knob {
+    position:absolute; top:50%; left:0%; width:15px; height:15px; border-radius:50%;
+    background:#fff; transform: translate(-50%,-50%);
+    box-shadow: 0 2px 8px rgba(0,0,0,.4); opacity:0; transition:opacity .15s ease;
+  }
+  #track:active #knob, #track:hover #knob { opacity:1; }
+  #ptime { display:flex; justify-content:space-between; font-size:11.5px; color:var(--txt-dim); margin-top:7px;
+    font-variant-numeric: tabular-nums; }
+  #pctrl { display:flex; align-items:center; justify-content:space-between; margin-top:12px; }
+  #turnLabel { font-size:12px; color:var(--txt-dim); }
+  #pbtns { display:flex; gap:14px; align-items:center; }
+  .pbtn {
+    width:46px; height:46px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:var(--txt);
+    background: var(--glass-strong); border:1px solid var(--stroke-bright);
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .pbtn:active { transform:scale(.9); filter:brightness(1.25); }
+  .pbtn.main {
+    width:60px; height:60px;
+    background: linear-gradient(135deg, rgba(94,162,255,.45), rgba(139,123,255,.45));
+    border-color: rgba(140,160,255,.55);
+    box-shadow: 0 8px 22px rgba(80,110,255,.4), inset 0 1px 0 rgba(255,255,255,.25);
+  }
+
+  #turn { padding:10px 14px; border-radius:999px; font-size:12.5px; font-weight:600;
+    display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  #turnText { min-width:0; }
+  #switches { display:flex; gap:8px; flex-shrink:0; }
+  .chip {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:7px 13px; border-radius:999px; font-size:12px; font-weight:600; cursor:pointer;
+    color:var(--txt); background: var(--glass-strong); border:1px solid var(--stroke-bright);
+    transition: transform .12s ease, background .15s ease, border-color .15s ease;
+    white-space:nowrap;
+  }
+  .chip:active { transform:scale(.94); }
+  .chip.on { background: rgba(94,162,255,.3); border-color: rgba(94,162,255,.65); }
+  .chip.warn.on { background: rgba(255,179,0,.26); border-color: rgba(255,179,0,.6); }
+  .chip .crown { color:var(--gold); }
+
+  #searchbar { display:flex; align-items:center; gap:10px; padding:6px 8px 6px 16px; border-radius:999px; }
+  #q { flex:1; background:transparent; border:none; outline:none; color:var(--txt);
+    font-size:15px; padding:9px 0; min-width:0; font-family:inherit; }
+  #q::placeholder { color: rgba(255,255,255,.42); }
+  #srcrow { display:flex; gap:8px; align-items:center; }
+  #searching { font-size:12px; color:var(--txt-dim); margin-left:4px; }
+  #results { display:flex; flex-direction:column; gap:8px; }
+  .res {
+    display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:var(--r-md); cursor:pointer;
+    background: var(--glass-strong); border:1px solid transparent;
+    transition: transform .12s ease, background .15s ease, border-color .15s ease;
+  }
+  .res:active { transform:scale(.98); background: rgba(255,255,255,.16); border-color: var(--stroke-bright); }
+  .res .ricon { color:var(--accent); flex-shrink:0; }
+  .res.vip .ricon { color:var(--gold); }
+  .res .rn { flex:1; min-width:0; }
+  .res .rn b { display:flex; align-items:center; gap:6px; font-size:13.5px; font-weight:600;
+    overflow:hidden; }
+  .res .rn b > span.t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .res .rn i { display:block; font-size:11.5px; color:var(--txt-dim); font-style:normal; margin-top:3px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-variant-numeric: tabular-nums; }
+
+  .sec { font-size:12px; color:var(--txt-dim); margin-bottom:-6px; padding-left:4px; letter-spacing:.3px; }
+  #log { display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto; padding:12px; }
+  .msg { display:flex; gap:7px; }
+  .msg.ai { justify-content:flex-start; }
+  .msg.me { justify-content:flex-end; }
+  .msg .bubble {
+    max-width:78%; padding:10px 14px; border-radius:18px; font-size:13.5px; line-height:1.5;
+    background: var(--glass-strong); border:1px solid var(--stroke);
+  }
+  .msg.me .bubble {
+    background: linear-gradient(135deg, rgba(94,162,255,.32), rgba(124,77,255,.3));
+    border-color: rgba(120,150,255,.35);
+    border-radius:18px 18px 6px 18px;
+  }
+  .msg.ai .bubble { border-radius:18px 18px 18px 6px; }
+  .empty { font-size:12.5px; color:var(--txt-dim); padding:8px 4px; line-height:1.6; }
+
+  #queue { display:flex; flex-direction:column; gap:8px; padding:10px; }
+  .qrow { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--r-sm);
+    background: rgba(255,255,255,.06); border:1px solid transparent; font-size:13px;
+    transition: background .15s ease, border-color .15s ease; }
+  .qrow.cur { background: rgba(94,162,255,.2); border-color: rgba(94,162,255,.4); }
+  .tag { font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:999px; flex-shrink:0; letter-spacing:.3px; }
+  .tag.me { background: rgba(94,162,255,.3); color:#a8cbff; }
+  .tag.ai { background: rgba(255,179,0,.2); color:var(--gold-txt); }
+  .qrow .qn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .qstate { font-size:11px; color:var(--txt-dim); flex-shrink:0; }
+  .qrow.cur .qstate { color:var(--accent); }
+
+  #chatbar { display:flex; align-items:center; gap:8px; padding:6px 8px 6px 18px; border-radius:999px; }
+  #cmsg { flex:1; background:transparent; border:none; outline:none; color:var(--txt);
+    font-size:15px; padding:10px 0; min-width:0; font-family:inherit; }
+  #cmsg::placeholder { color: rgba(255,255,255,.42); }
+  #send {
+    width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:#fff; flex-shrink:0;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border:none; box-shadow: 0 6px 16px rgba(80,110,255,.45);
+    transition: transform .12s ease, filter .12s ease;
+  }
+  #send:active { transform:scale(.9); filter:brightness(1.15); }
+  .busy { opacity:.4; pointer-events:none; }
+  .loading { opacity:.6; font-size:12px; padding:4px 2px; }
+
+  ::-webkit-scrollbar { width:0; height:0; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div class="wrap">
+  <!-- 顶栏 -->
+  <div id="topbar" class="glass">
+    <div class="iconbtn" id="back">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </div>
+    <div id="ttl">
+      <h1>AI 一起听</h1>
+      <p id="sub">轮流点歌 · 酷狗 / 网易云</p>
+    </div>
+  </div>
+
+  <!-- 播放器 -->
+  <div id="player" class="glass">
+    <div id="prow">
+      <div id="cover">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      </div>
+      <div id="meta">
+        <div id="name"><span id="songname">还没有在放歌</span></div>
+        <div id="artist">AI 正在点今天的第一首歌…</div>
+        <div id="note"></div>
+      </div>
+    </div>
+    <div id="prog">
+      <div id="track"><div id="fill"></div><div id="knob"></div></div>
+      <div id="ptime"><span id="tnow">0:00</span><span id="ttotal">0:00</span></div>
+    </div>
+    <div id="pctrl">
+      <span id="turnLabel"></span>
+      <div id="pbtns">
+        <div class="pbtn" id="prev">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6l-10 6 10 6z"/></svg>
+        </div>
+        <div class="pbtn main" id="play"></div>
+        <div class="pbtn" id="next">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6l10 6-10 6z"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 排除 VIP -->
+  <div id="turn" class="glass">
+    <span id="turnText">轮到你了，搜一首点吧</span>
+    <span id="switches">
+      <span class="chip" id="exUser">
+        <svg class="crown" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/></svg>
+        排除VIP
+      </span>
+      <span class="chip warn" id="exAi">
+        <svg class="crown" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/></svg>
+        AI排除VIP
+      </span>
+    </span>
+  </div>
+
+  <!-- 搜索 -->
+  <div id="searchbar" class="glass">
+    <input id="q" placeholder="搜索歌曲…" type="text">
+    <div class="iconbtn" id="doSearch">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    </div>
+  </div>
+  <div id="srcrow">
+    <span class="chip" id="srcKugou">酷狗</span>
+    <span class="chip" id="srcNetease">网易云</span>
+    <span id="searching" class="loading" style="display:none;">搜索中…</span>
+  </div>
+  <div id="results"></div>
+
+  <!-- 点歌对话 -->
+  <div class="sec">点歌对话</div>
+  <div id="log" class="glass"><div class="empty">你点一首、AI 点一首，播放进度每 20 秒汇报给 AI。</div></div>
+
+  <!-- 队列 -->
+  <div class="sec">播放队列</div>
+  <div id="queue" class="glass"></div>
+
+  <!-- 聊天输入 -->
+  <div id="chatbar" class="glass">
+    <input id="cmsg" placeholder="和 AI 聊聊这首歌…" type="text">
+    <div id="send">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </div>
+  </div>
+</div>
+<audio id="audio" preload="auto"></audio>
+<script src="glasskit.js"></script>
+<script>
+"use strict";
+/* SVG 图标 */
+var SVG_PLAY = '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+var SVG_PAUSE = '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+var SVG_NOTE = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+var SVG_VIP = '<span class="vip">VIP</span>';
+
+/* ================= 角色信息（来自应用内本地服务器，同源 /api/config） ================= */
+var CONFIG = { characterName:"灵伴" };
+fetch("/api/config").then(function(res){ return res.json(); }).then(function(j){
+  CONFIG = j || CONFIG;
+  document.getElementById("sub").textContent = "轮流点歌 · 与 " + (CONFIG.characterName || "灵伴") + " · 酷狗 / 网易云";
+}).catch(function(){ console.log("config fetch err"); });
+
+/* ================= 工具 ================= */
+function clean(s){ return (s||"").replace(/<[^>]*>/g,"").trim(); }
+function esc(s){ return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function fmt(ms){
+  if(!ms || ms <= 0) return "0:00";
+  var s = Math.floor(ms/1000);
+  return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0");
+}
+function endpoint(base){
+  var u = (base||"").trim().replace(/\/+$/,"");
+  if(!u) u = "https://api.openai.com/v1";
+  if(!/\/v1$/.test(u)) u += "/v1";
+  return u + "/chat/completions";
+}
+async function chatOnce(messages, maxTokens){
+  // AI 聊天：由应用内本地服务器原生代理（无 CORS，复用主应用 API 配置）
+  var res = await fetch("/api/chat", {
+    method:"POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify({ messages: messages, maxTokens: maxTokens || 120 })
+  });
+  var j = await res.json();
+  if(j.error) throw new Error(friendlyErr(j.error));
+  return j.reply || "";
+}
+function friendlyErr(s){
+  s = String(s || "");
+  if(/timed out|timeout/i.test(s)) return "回复超时：模型响应太慢或网络不稳定，稍后再试";
+  if(/尚未配置/.test(s)) return s;
+  return s;
+}
+
+/* ================= 音乐接口（应用内本地服务器代理：无 CORS / 防盗链） ================= */
+async function searchKugou(kw, limit){
+  var res = await fetch("/api/search?q=" + encodeURIComponent(kw) + "&source=kugou&limit=" + (limit || 30));
+  var j = await res.json();
+  if(j.error) throw new Error(j.error);
+  return j.list || [];
+}
+async function searchNetease(kw, limit){
+  var res = await fetch("/api/search?q=" + encodeURIComponent(kw) + "&source=netease&limit=" + (limit || 30));
+  var j = await res.json();
+  if(j.error) throw new Error(j.error);
+  return j.list || [];
+}
+async function kugouUrl(hash, albumId){
+  var res = await fetch("/api/resolve?token=" + encodeURIComponent(hash) + "&source=kugou&album_id=" + encodeURIComponent(albumId || "0"));
+  var j = await res.json();
+  if(!j.url) throw new Error(j.error || "无法获取播放地址（可能为 VIP/付费）");
+  return j.url;
+}
+async function neteaseUrl(id){
+  var res = await fetch("/api/resolve?token=" + encodeURIComponent(id) + "&source=netease");
+  var j = await res.json();
+  if(!j.url) throw new Error(j.error || "无法获取播放地址（可能为 VIP/付费或需登录）");
+  return j.url;
+}
+async function resolveUrl(t){
+  return t.source === "kugou" ? kugouUrl(t.id, t.albumId || "0") : neteaseUrl(t.id);
+}
+
+/* ================= 状态 ================= */
+var queue = [], currentIdx = -1;
+var turn = "ai", aiPicking = false, aiBusy = false, playing = false;
+var excludeVipUser = false, excludeVipAi = false;
+var chatLog = [];
+var source = "kugou", lastReport = -1, lastSearchResults = null;
+var audio = document.getElementById("audio");
+
+/* ================= 渲染 ================= */
+function renderPlayer(){
+  var q = queue[currentIdx];
+  var playBtn = document.getElementById("play");
+  if(!q){
+    document.getElementById("songname").textContent = "还没有在放歌";
+    document.getElementById("artist").textContent = "AI 正在点今天的第一首歌…";
+    document.getElementById("note").textContent = "";
+    playBtn.innerHTML = SVG_PLAY;
+    return;
+  }
+  var t = q.track;
+  document.getElementById("name").innerHTML =
+    '<span id="songname">' + esc(t.name) + '</span>' + (t.isVip ? SVG_VIP : "");
+  document.getElementById("artist").textContent = t.artist || "未知歌手";
+  var note = "";
+  if(q.state === "failed") note = "播放失败（可能为 VIP/付费）";
+  else note = (q.by === "user" ? "你点的" : "AI 点的") + " · " + fmt(t.durationMs);
+  document.getElementById("note").textContent = note;
+  playBtn.innerHTML = audio.paused ? SVG_PLAY : SVG_PAUSE;
+}
+function renderQueue(){
+  var box = document.getElementById("queue");
+  if(!queue.length){ box.innerHTML = ""; return; }
+  box.innerHTML = queue.map(function(q, i){
+    var t = q.track, cur = i === currentIdx;
+    var st = q.state === "failed" ? "播放失败" : (cur ? "播放中" : "");
+    return '<div class="qrow ' + (cur ? "cur" : "") + '">' +
+      '<span class="tag ' + (q.by === "user" ? "me" : "ai") + '">' + (q.by === "user" ? "你" : "AI") + '</span>' +
+      '<span class="qn">' + esc(t.name) + '</span>' + (t.isVip ? SVG_VIP : "") +
+      '<span class="qstate">' + st + '</span></div>';
+  }).join("");
+}
+function addLog(role, text){
+  chatLog.push({ role:role, text:text });
+  var box = document.getElementById("log");
+  box.querySelector(".empty") && box.querySelector(".empty").remove();
+  var d = document.createElement("div");
+  d.className = "msg " + (role === "user" ? "me" : "ai");
+  d.innerHTML = '<div class="bubble">' + esc(text) + '</div>';
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+function notice(t){ document.getElementById("note").textContent = t; }
+function setTurn(){
+  var el = document.getElementById("turnText");
+  if(playing) el.textContent = "正在播放，播完自动轮到下一位点歌…";
+  else if(aiPicking) el.textContent = "轮到 AI 点歌… AI 正在挑";
+  else if(turn === "ai") el.textContent = "轮到 AI 点歌…";
+  else el.textContent = "轮到你了，搜一首点吧";
+}
+function setSearching(on){ document.getElementById("searching").style.display = on ? "" : "none"; }
+function renderResults(list){
+  var box = document.getElementById("results");
+  if(!list){ box.innerHTML = ""; return; }
+  if(!list.length){ box.innerHTML = '<div class="empty">没有结果</div>'; return; }
+  box.innerHTML = list.map(function(t){
+    return '<div class="res ' + (t.isVip ? "vip" : "") + '" data-i="' + esc(t.id) + '">' +
+      '<span class="ricon">' + SVG_NOTE + '</span>' +
+      '<div class="rn"><b><span class="t">' + esc(t.name) + '</span>' + (t.isVip ? SVG_VIP : "") + '</b>' +
+      '<i>' + esc(t.artist || "未知歌手") + ' · ' + fmt(t.durationMs) + ' · ' + (t.source === "kugou" ? "酷狗" : "网易云") + '</i></div></div>';
+  }).join("");
+}
+document.getElementById("results").addEventListener("click", function(ev){
+  var r = ev.target.closest(".res");
+  if(!r) return;
+  var id = r.getAttribute("data-i");
+  var t = (lastSearchResults || []).find(function(x){ return x.id === id; });
+  if(t) userPick(t);
+});
+
+/* ================= 播放（一首一首，播完才轮换） ================= */
+function playAt(idx){
+  if(idx < 0 || idx >= queue.length) return;
+  currentIdx = idx;
+  var q = queue[idx];
+  renderPlayer(); renderQueue();
+  if(q.state === "failed") return;
+  var t = q.track;
+  notice("解析播放地址…");
+  resolveUrl(t).then(function(url){
+    q.track.playUrl = url;
+    q.state = "playing";
+    playing = true;
+    setTurn();
+    audio.src = url;
+    audio.play().then(function(){
+      renderPlayer(); renderQueue(); renderFill();
+      reportNow();
+    }).catch(function(e){
+      q.state = "failed"; renderPlayer(); renderQueue();
+      notice("播放失败：" + (e && e.message ? e.message : "未知错误"));
+      setTimeout(function(){ nextTurn(); }, 1200);
+    });
+  }).catch(function(e){
+    q.state = "failed";
+    renderPlayer(); renderQueue();
+    notice("播放失败：" + (e && e.message ? e.message : "未知错误"));
+    setTimeout(function(){ nextTurn(); }, 1200);
+  });
+}
+function enqueue(t, by){
+  queue = [{ track:t, by:by, state:"waiting" }];  // 每轮只点一首，播完才轮到下一位
+  currentIdx = -1;
+  playAt(0);
+}
+function nextTurn(){
+  audio.pause();
+  try { audio.removeAttribute("src"); } catch(e){}
+  queue = []; currentIdx = -1;
+  playing = false;
+  lastReport = -1;
+  renderPlayer(); renderQueue(); renderFill();
+  if (turn === "user") { turn = "ai"; setTurn(); aiPick(); }
+  else { turn = "user"; setTurn(); notice("轮到你了，搜一首点吧"); }
+}
+document.getElementById("prev").onclick = function(){ notice("一首一首播，播完才轮到下一位"); };
+document.getElementById("next").onclick = function(){ nextTurn(); };
+document.getElementById("play").onclick = function(){
+  if(currentIdx < 0) return;
+  if(audio.paused) audio.play(); else audio.pause();
+};
+document.getElementById("track").onclick = function(ev){
+  var r = this.getBoundingClientRect();
+  var ratio = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+  if(audio.duration) audio.currentTime = audio.duration * ratio;
+};
+audio.ontimeupdate = function(){ renderFill(); };
+audio.onended = function(){ nextTurn(); };
+audio.onerror = function(){ nextTurn(); };
+function renderFill(){
+  var p = audio.duration ? (audio.currentTime / audio.duration) : 0;
+  document.getElementById("fill").style.width = (p * 100) + "%";
+  document.getElementById("knob").style.left = (p * 100) + "%";
+  document.getElementById("tnow").textContent = fmt(audio.currentTime * 1000);
+  document.getElementById("ttotal").textContent = audio.duration ? fmt(audio.duration * 1000) : fmt(queue[currentIdx] && queue[currentIdx].track.durationMs);
+}
+
+/* ================= 20 秒进度汇报 ================= */
+function reportNow(){
+  if(currentIdx < 0 || !queue[currentIdx]) return;
+  var q = queue[currentIdx];
+  if(q.state !== "playing") return;
+  var sec = Math.floor(audio.currentTime || 0);
+  if(sec === lastReport) return;
+  lastReport = sec;
+  var t = q.track, tag = t.isVip ? "VIP 歌曲" : "免费歌曲";
+  addLog("ai", "播放进度：正在播放《" + t.name + "》- " + (t.artist||"未知歌手") + "（" + tag + "），已播放 " + sec + " 秒");
+  aiBusy = true;
+  chatOnce([
+    { role:"system", content:"你是「" + CONFIG.characterName + "」的 AI 一起听陪听员，和用户一起听歌。请简短回应（30 字以内），点评这首歌或聊点相关的。" },
+    { role:"user", content:"当前正在播放《" + t.name + "》- " + (t.artist||"未知歌手") + "（" + tag + "），已播放 " + sec + " 秒。" }
+  ], 60).then(function(reply){
+    addLog("ai", reply.trim());
+  }).catch(function(){
+    addLog("ai", "（进度已记录：" + sec + " 秒）");
+  }).finally(function(){ aiBusy = false; });
+}
+setInterval(function(){
+  var q = queue[currentIdx];
+  if(!q || q.state !== "playing") return;
+  if(Math.floor(audio.currentTime || 0) - lastReport >= 20) reportNow();
+}, 2000);
+
+/* ================= 轮流点歌 ================= */
+function aiPick(){
+  if(aiPicking || aiBusy || playing) return;
+  if(turn !== "ai") return;                 // 严格轮换：没轮到 AI 不点
+  aiPicking = true; setTurn();
+  addLog("ai", "AI 正在点歌…");
+  var last = queue[currentIdx] && queue[currentIdx].track;
+  var sys = "你是「" + CONFIG.characterName + "」的 AI 一起听点歌员，正在和用户玩「轮流点歌」：用户点一首，你点一首。\n" +
+    "规则：轮到你时，只回复一首歌，格式严格为：歌名-歌手（例如：晴天-周杰伦），不要任何多余文字。\n" +
+    (excludeVipAi ? "你被要求排除 VIP 歌曲：只选免费可播的歌曲。\n" : "");
+  var usr = "轮到你点歌了。" + (last ? "上一首播放的是《" + last.name + "》- " + (last.artist||"未知歌手") + (last.isVip ? "（VIP 歌曲）" : "（免费歌曲）") + "。" : "") + "请点一首歌（格式：歌名-歌手）";
+  chatOnce([{ role:"system", content:sys }, { role:"user", content:usr }], 60).then(function(reply){
+    reply = (reply||"").trim();
+    var m = reply.match(/^(?:《)?([^《》\-—–\s]+(?:[^《》\-—–]*[^《》\-—–\s])?)[-—–]\s*(.+)$/);
+    var namePart, artistPart;
+    if(m){ namePart = m[1]; artistPart = m[2]; }
+    else if(reply.indexOf("-") > 0){ var sp = reply.split("-"); namePart = sp[0].trim(); artistPart = sp.slice(1).join("-").trim(); }
+    else { addLog("ai", reply); notice("AI 回复格式不对，请手动点歌"); aiPicking = false; setTurn(); return; }
+    return searchPlay(namePart + " " + artistPart, true, namePart);
+  }).then(function(){ aiPicking = false; setTurn(); })
+    .catch(function(e){
+      addLog("ai", "AI 点歌失败：" + (e && e.message ? e.message : "未知错误"));
+      aiPicking = false; setTurn(); turn = "user";
+    });
+}
+async function searchPlay(kw, isAi, preferName){
+  var list = null;
+  try { list = await searchKugou(kw, 10); } catch(e){}
+  if(!list || !list.length){ try { list = await searchNetease(kw, 10); } catch(e){} }
+  if(!list || !list.length){
+    if(isAi){ addLog("ai", "没搜到《" + kw + "》，换一首吧～"); notice("搜索无结果：" + kw); turn = "user"; }
+    else notice("搜索无结果");
+    return;
+  }
+  if(isAi){
+    var c = preferName ? list.find(function(t){ return t.name.indexOf(preferName) >= 0; }) : null;
+    if(!c) c = list[0];
+    if(excludeVipAi){ c = list.find(function(t){ return !t.isVip; }) || c; }
+    addLog("ai", "AI 点了：《" + c.name + "》- " + (c.artist||"未知歌手") + (c.isVip ? "（VIP 歌曲）" : "（免费歌曲）"));
+    enqueue(c, "ai");
+    // turn 保持 "ai"：这首播完 nextTurn 才切给用户
+  } else { return list; }
+}
+function userPick(t){
+  if(playing){ notice("正在播放中，等这首播完才轮到点歌"); return; }
+  if(turn !== "user"){ notice("还没轮到你点歌，等 AI 这首播完"); return; }
+  if(excludeVipUser && t.isVip){ notice("已开启「排除 VIP」，请选择免费歌曲"); return; }
+  notice("");
+  addLog("user", "我点一首：" + t.name + " - " + (t.artist||"未知歌手"));
+  var tag = t.isVip ? "（VIP 歌曲）" : "（免费歌曲）";
+  enqueue(t, "user");
+  addLog("ai", "已开始播放《" + t.name + "》- " + (t.artist||"未知歌手") + " " + tag + "，这首播完轮到 AI 点歌。");
+  // turn 保持 "user"（当前是用户点的歌在播），播完 nextTurn 才切给 AI
+}
+
+/* ================= 搜索交互 ================= */
+function doSearch(){
+  var kw = document.getElementById("q").value.trim();
+  if(!kw) return;
+  setSearching(true);
+  var fn = source === "kugou" ? searchKugou : searchNetease;
+  fn(kw, 30).then(function(list){
+    list = list || [];
+    if(excludeVipUser) list = list.filter(function(t){ return !t.isVip; });
+    lastSearchResults = list;
+    renderResults(list);
+    setSearching(false);
+  }).catch(function(e){
+    renderResults(null);
+    setSearching(false);
+    notice("搜索失败：" + (e && e.message ? e.message : "未知错误"));
+  });
+}
+document.getElementById("doSearch").onclick = doSearch;
+document.getElementById("q").addEventListener("keydown", function(e){ if(e.key === "Enter") doSearch(); });
+function setSrc(s){
+  source = s;
+  document.getElementById("srcKugou").classList.toggle("on", s === "kugou");
+  document.getElementById("srcNetease").classList.toggle("on", s === "netease");
+}
+document.getElementById("srcKugou").onclick = function(){ setSrc("kugou"); };
+document.getElementById("srcNetease").onclick = function(){ setSrc("netease"); };
+setSrc("kugou");
+
+/* ================= 排除 VIP 开关 ================= */
+document.getElementById("exUser").onclick = function(){
+  excludeVipUser = !excludeVipUser;
+  this.classList.toggle("on", excludeVipUser);
+  notice(excludeVipUser ? "已开启「排除 VIP」：搜索结果将隐藏 VIP 歌曲" : "已关闭「排除 VIP」");
+};
+document.getElementById("exAi").onclick = function(){
+  excludeVipAi = !excludeVipAi;
+  this.classList.toggle("on", excludeVipAi);
+  notice(excludeVipAi ? "已开启「AI 排除 VIP」：AI 只点免费歌曲" : "已关闭「AI 排除 VIP」");
+};
+
+/* ================= 聊天 ================= */
+function sendChat(){
+  var box = document.getElementById("cmsg");
+  var t = box.value.trim();
+  if(!t || aiBusy) return;
+  addLog("user", t);
+  box.value = "";
+  aiBusy = true;
+  var hist = chatLog.slice(-12).map(function(m){ return { role:m.role === "user" ? "user" : "assistant", content:m.text }; });
+  hist.push({ role:"user", content:t });
+  chatOnce([{ role:"system", content:"你是「" + CONFIG.characterName + "」，正在和用户一起听歌。语气符合角色人设，回复简洁有温度。" }].concat(hist), 200)
+    .then(function(r){ addLog("ai", (r||"").trim()); })
+    .catch(function(e){ addLog("ai", "回复失败：" + (e && e.message ? e.message : "未知错误")); })
+    .finally(function(){ aiBusy = false; });
+}
+document.getElementById("send").onclick = sendChat;
+document.getElementById("cmsg").addEventListener("keydown", function(e){ if(e.key === "Enter") sendChat(); });
+
+/* ================= 返回（左上角） ================= */
+document.getElementById("back").onclick = function(){
+  try { if(window.TogetherBridge) window.TogetherBridge.exit(); } catch(e){}
+};
+
+/* ================= 进入：AI 先点一首（播放中的歌播完才轮换） ================= */
+setTurn();
+setTimeout(function(){ aiPick(); }, 400);
+
+/* ================= 液态玻璃引擎（glasskit-js：SVG feDisplacementMap 真实折射 + 镜面高光） ================= */
+(function initGlass(){
+  var LG = window.LiquidGlass || window.Glasskit;
+  if (!LG) return;
+  var cards = document.querySelectorAll('#topbar, #player, #turn, #searchbar, #log, #queue, #chatbar');
+  for (var i = 0; i < cards.length; i++) {
+    try {
+      LG.apply(cards[i], {
+        mode: 'svg',            // Chromium(WebView) 上：feDisplacementMap 折射叠在 backdrop-filter 之上
+        frost: 6,               // 磨砂
+        refraction: 55,         // 折射强度
+        dispersion: 0.4,        // 色散（边缘彩虹）
+        depth: 0.35,            // 玻璃厚度感
+        curvature: 0.6,         // 圆润度（球面→圆角矩形）
+        convexity: 0.5,         // 凸透镜感
+        sheen: 0.85,            // 斜向镜面光泽
+        sheenAngle: 148,        // 光泽方向
+        lightAngle: 148,
+        lightIntensity: 0.55,   // 顶部受光
+        tint: 'linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.02))',
+        shadow: '0 18px 44px rgba(0,0,0,.32)'
+      });
+    } catch (e) { console.log("glass apply err", e); }
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AI 一起听</title>
+<style>
+  :root {
+    --bg0:#eef1f8; --bg1:#f7f8fc;
+    --ink:#1c2233; --ink-dim:#67718a;
+    --card: rgba(255,255,255,.72);
+    --stroke: rgba(255,255,255,.9);
+    --accent:#3f6fd6; --accent2:#7b5cff; --pink:#c44ad6;
+    --gold:#f59e0b; --gold-txt:#b45309;
+    --r-lg:26px; --r-md:18px; --r-sm:14px;
+    --shadow: 0 12px 32px rgba(63,80,140,.16);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+      "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+    color: var(--ink);
+    overflow-y:auto; -webkit-user-select:none; user-select:none;
+    letter-spacing:.1px;
+  }
+  #bg {
+    position: fixed; inset:0; z-index:-2;
+    background:
+      radial-gradient(680px 520px at 88% -8%, rgba(120,160,255,.5), transparent 68%),
+      radial-gradient(600px 460px at -12% 26%, rgba(200,170,255,.42), transparent 70%),
+      radial-gradient(520px 420px at 100% 88%, rgba(255,190,225,.4), transparent 72%),
+      radial-gradient(480px 380px at 12% 100%, rgba(160,225,255,.4), transparent 70%),
+      linear-gradient(168deg, var(--bg1) 0%, var(--bg0) 52%, #e9edf7 100%);
+  }
+
+  /* ===== 平面白卡片（液态玻璃只用于控件，全部来自开源项目 GooseHyperGlass
+        https://glass.goose.cc.cd · MIT · 纯 WebGL 真折射，非 backdrop-filter blur 毛玻璃） ===== */
+  .glass {
+    background: var(--card);
+    backdrop-filter: saturate(165%);
+    -webkit-backdrop-filter: saturate(165%);
+    border: 1px solid var(--stroke);
+    box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.9);
+  }
+  .wrap { padding: 12px 16px 30px; display:flex; flex-direction:column; gap:14px; }
+  svg { display:block; }
+
+  #topbar { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:var(--r-lg); }
+  .iconbtn {
+    width:40px; height:40px; border-radius:50%; flex-shrink:0; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; color:var(--ink);
+    background: rgba(255,255,255,.85); border:1px solid var(--stroke);
+    box-shadow: 0 4px 12px rgba(63,80,140,.12);
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .iconbtn:active { transform:scale(.92); filter:brightness(.97); }
+  #ttl { flex:1; min-width:0; }
+  #ttl h1 { font-size:17px; font-weight:700; letter-spacing:.2px; }
+  #ttl p { font-size:12px; color:var(--ink-dim); margin-top:2px; }
+
+  #player { padding:18px; }
+  #prow { display:flex; align-items:center; gap:16px; }
+  #cover {
+    width:64px; height:64px; border-radius:20px; flex-shrink:0; color:rgba(255,255,255,.95);
+    display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(135deg,#3f6fd6,#7b5cff 52%,#c44ad6);
+    box-shadow: 0 10px 22px rgba(100,110,255,.32), inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  #meta { flex:1; min-width:0; }
+  #name { display:flex; align-items:center; gap:8px; }
+  #songname { font-size:16px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #artist { font-size:12.5px; color:var(--ink-dim); margin-top:3px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #note { font-size:11.5px; color:var(--ink-dim); margin-top:3px; }
+  .vip {
+    font-size:10px; font-weight:800; color:var(--gold-txt); flex-shrink:0;
+    background: linear-gradient(135deg, rgba(245,158,11,.18), rgba(255,180,60,.16));
+    border:1px solid rgba(245,158,11,.45);
+    padding:2px 7px; border-radius:999px; letter-spacing:.4px;
+  }
+  #prog { margin-top:16px; }
+  .slider-box { position:relative; height:46px; border-radius:999px; }
+  #seekLg { position:absolute; inset:0; width:100%; height:100%; }
+  #seekFb {
+    display:none; position:absolute; inset:0; width:100%; height:100%;
+    -webkit-appearance:none; appearance:none; background:transparent; outline:none;
+  }
+  #seekFb::-webkit-slider-runnable-track { height:7px; border-radius:999px; background: rgba(63,111,214,.18); }
+  #seekFb::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%;
+    background:#fff; margin-top:-5.5px; box-shadow: 0 2px 8px rgba(63,80,140,.35); }
+  #ptime { display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-dim); margin-top:-4px;
+    font-variant-numeric: tabular-nums; }
+  #pctrl { display:flex; align-items:center; justify-content:space-between; margin-top:6px; }
+  #turnLabel { font-size:12px; color:var(--ink-dim); }
+  #pbtns { display:flex; gap:14px; align-items:center; }
+  .pbtn-wrap { position:relative; width:46px; height:46px; border-radius:50%; flex-shrink:0; }
+  .pbtn-wrap.main-wrap { width:60px; height:60px; }
+  .pbtn-wrap liquid-glass { position:absolute; inset:0; width:100%; height:100%; }
+  .pbtn-wrap .pbtn { position:absolute; inset:0; }
+  .search-btn-wrap { position:relative; width:40px; height:40px; border-radius:50%; flex-shrink:0; }
+  .search-btn-wrap liquid-glass { position:absolute; inset:0; width:100%; height:100%; }
+  .search-btn-wrap .iconbtn { position:absolute; inset:0; }
+  .pbtn {
+    width:46px; height:46px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color:var(--ink);
+    background: rgba(255,255,255,.9); border:1px solid var(--stroke);
+    box-shadow: 0 4px 12px rgba(63,80,140,.14);
+    transition: transform .12s ease, filter .12s ease;
+  }
+  .pbtn:active { transform:scale(.9); filter:brightness(.97); }
+  .pbtn.main {
+    width:60px; height:60px;
+    background: linear-gradient(135deg,#3f6fd6,#7b5cff 60%,#c44ad6); color:#fff;
+    border:none;
+    box-shadow: 0 8px 20px rgba(100,110,255,.4);
+  }
+
+  #turn { padding:12px 16px; border-radius:22px; font-size:12.5px; font-weight:600;
+    display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  #turnText { min-width:0; }
+  #switches { display:flex; gap:10px; flex-shrink:0; align-items:center; }
+  .sw-wrap { display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-dim); font-weight:600; cursor:pointer; -webkit-tap-highlight-color:transparent; user-select:none; }
+  .sw-wrap.on { color:var(--gold); }
+  .sw-wrap .sw-lbl { transition: color .2s; }
+  /* 音效混音台 */
+  #eqbar { margin:10px 14px 0; padding:10px 12px; }
+  .eq-head { display:flex; align-items:center; gap:10px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .eq-title { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; color:var(--ink); }
+  .eq-presets { display:flex; gap:6px; flex:1; overflow-x:auto; }
+  .eq-chip { padding:4px 10px; border-radius:999px; font-size:11.5px; font-weight:600; color:var(--ink-dim); background:rgba(255,255,255,.25); border:1px solid rgba(255,255,255,.35); cursor:pointer; white-space:nowrap; -webkit-tap-highlight-color:transparent; }
+  .eq-chip.on { color:#fff; background:rgba(61,139,255,.55); border-color:transparent; }
+  .eq-caret { color:var(--ink-dim); font-size:12px; transition:transform .25s; }
+  #eqBody { display:none; margin-top:10px; }
+  #eqBody.open { display:block; }
+  .eq-row { display:flex; align-items:center; gap:10px; margin:7px 0; font-size:12px; color:var(--ink-dim); }
+  .eq-lbl { width:64px; flex-shrink:0; font-weight:600; }
+  .eq-slider { flex:1; -webkit-appearance:none; appearance:none; height:6px; border-radius:999px; background:rgba(255,255,255,.35); outline:none; }
+  .eq-slider::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:linear-gradient(160deg,#7fd0ff,#3d8bff); box-shadow:0 2px 8px rgba(0,0,0,.3); }
+  .eq-row b { width:26px; text-align:right; font-variant-numeric:tabular-nums; }
+  .eq-beat { font-size:12px; }
+  .eq-beat input { accent-color:#3d8bff; }
+  .eq-note { font-size:10.5px; color:var(--ink-dim); opacity:.75; margin-top:8px; line-height:1.5; }
+  .sw-box { position:relative; width:58px; height:34px; border-radius:999px; }
+  .sw-lg { position:absolute; inset:0; width:100%; height:100%; }
+  .sw-fb { display:none; position:absolute; inset:0; width:100%; height:100%; }
+
+  #searchbar { display:flex; align-items:center; gap:10px; padding:6px 8px 6px 16px; border-radius:999px; }
+  #q { flex:1; background:transparent; border:none; outline:none; color:var(--ink);
+    font-size:15px; padding:9px 0; min-width:0; font-family:inherit; }
+  #q::placeholder { color: rgba(103,113,138,.55); }
+  #srcrow { display:flex; gap:8px; align-items:center; }
+  #searching { font-size:12px; color:var(--ink-dim); margin-left:4px; }
+  #results { display:flex; flex-direction:column; gap:8px; }
+  .res {
+    display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:var(--r-md); cursor:pointer;
+    background: rgba(255,255,255,.85); border:1px solid var(--stroke);
+    box-shadow: 0 4px 14px rgba(63,80,140,.1);
+    transition: transform .12s ease, background .15s ease;
+  }
+  .res:active { transform:scale(.98); background:#fff; }
+  .res .ricon { color:var(--accent); flex-shrink:0; }
+  .res.vip .ricon { color:var(--gold); }
+  .res .rn { flex:1; min-width:0; }
+  .res .rn b { display:flex; align-items:center; gap:6px; font-size:13.5px; font-weight:600;
+    overflow:hidden; }
+  .res .rn b > span.t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .res .rn i { display:block; font-size:11.5px; color:var(--ink-dim); font-style:normal; margin-top:3px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-variant-numeric: tabular-nums; }
+
+  .sec { font-size:12px; color:var(--ink-dim); margin-bottom:-6px; padding-left:4px; letter-spacing:.3px; }
+  #log { display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto; padding:12px; }
+  .msg { display:flex; gap:7px; }
+  .msg.ai { justify-content:flex-start; }
+  .msg.me { justify-content:flex-end; }
+  .msg .bubble {
+    max-width:78%; padding:10px 14px; border-radius:18px; font-size:13.5px; line-height:1.5;
+    background: rgba(255,255,255,.92); border:1px solid var(--stroke);
+    box-shadow: 0 3px 10px rgba(63,80,140,.08);
+  }
+  .msg.me .bubble {
+    background: linear-gradient(135deg, rgba(63,111,214,.9), rgba(123,92,255,.88));
+    color:#fff; border:none;
+    border-radius:18px 18px 6px 18px;
+  }
+  .msg.ai .bubble { border-radius:18px 18px 18px 6px; }
+  .empty { font-size:12.5px; color:var(--ink-dim); padding:8px 4px; line-height:1.6; }
+
+  #queue { display:flex; flex-direction:column; gap:8px; padding:10px; }
+  .qrow { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--r-sm);
+    background: rgba(255,255,255,.8); border:1px solid transparent; font-size:13px;
+    transition: background .15s ease, border-color .15s ease; }
+  .qrow.cur { background: rgba(63,111,214,.14); border-color: rgba(63,111,214,.35); }
+  .tag { font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:999px; flex-shrink:0; letter-spacing:.3px; }
+  .tag.me { background: rgba(63,111,214,.16); color:#2f5fc0; }
+  .tag.ai { background: rgba(245,158,11,.18); color:var(--gold-txt); }
+  .qrow .qn { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .qstate { font-size:11px; color:var(--ink-dim); flex-shrink:0; }
+  .qrow.cur .qstate { color:var(--accent); }
+
+  #chatbar { display:flex; align-items:center; gap:8px; padding:6px 8px 6px 18px; border-radius:999px; }
+  #cmsg { flex:1; background:transparent; border:none; outline:none; color:var(--ink);
+    font-size:15px; padding:10px 0; min-width:0; font-family:inherit; }
+  #cmsg::placeholder { color: rgba(103,113,138,.55); }
+  #send-wrap { position:relative; width:46px; height:46px; border-radius:50%; flex-shrink:0; }
+  #sendLg { position:absolute; inset:0; width:100%; height:100%; }
+  #send {
+    display:none; position:absolute; inset:0; width:100%; height:100%; border-radius:50%;
+    align-items:center; justify-content:center; cursor:pointer; color:#fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border:none; box-shadow: 0 6px 16px rgba(80,110,255,.4);
+  }
+  .busy { opacity:.4; pointer-events:none; }
+  .loading { opacity:.6; font-size:12px; padding:4px 2px; }
+
+  /* WebGL2 不可用 → 显示原生控件，隐藏液态玻璃控件 */
+  html.no-lg2 #seekLg, html.no-lg2 .sw-lg, html.no-lg2 #sendLg,
+  html.no-lg2 .pbtn-wrap liquid-glass, html.no-lg2 .search-btn-wrap liquid-glass { display:none; }
+  html.no-lg2 #seekFb, html.no-lg2 .sw-fb, html.no-lg2 #send { display:flex; }
+  html.no-lg2 .pbtn-wrap .pbtn, html.no-lg2 .search-btn-wrap .iconbtn { position:static; }
+
+  #bgLight {
+    position: fixed; inset:0; z-index:-1; pointer-events:none;
+    background-size: cover; background-position: center;
+    opacity:.32; filter: saturate(1.25);
+  }
+
+  ::-webkit-scrollbar { width:0; height:0; }
+</style>
+</head>
+<body>
+<!-- WebGL2 探测：支持才加载 GooseHyperGlass 液态玻璃库，否则启用原生控件降级 -->
+<script>
+  (function () {
+    var ok = false;
+    try { ok = !!(window.WebGL2RenderingContext && document.createElement('canvas').getContext('webgl2')); }
+    catch (e) { ok = false; }
+    window.__lgOk = ok;
+    if (!ok) document.documentElement.classList.add('no-lg2');
+    else document.write('<script src="goose-glass.js"><\/script>');
+  })();
+</script>
+
+<div id="bg"></div>
+<div id="bgLight"></div>
+
+<div class="wrap">
+  <!-- 顶栏 -->
+  <div id="topbar" class="glass">
+    <div class="iconbtn" id="back">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </div>
+    <div id="ttl">
+      <h1>AI 一起听</h1>
+      <p id="sub">轮流点歌 · 酷狗 / 网易云</p>
+    </div>
+  </div>
+
+  <!-- 播放器 -->
+  <div id="player" class="glass">
+    <div id="prow">
+      <div id="cover">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      </div>
+      <div id="meta">
+        <div id="name"><span id="songname">还没有在放歌</span></div>
+        <div id="artist">AI 正在点今天的第一首歌…</div>
+        <div id="note"></div>
+      </div>
+    </div>
+    <div id="prog">
+      <div class="slider-box">
+        <liquid-glass id="seekLg" mode="single-slider"  dpr="1.2"></liquid-glass>
+        <input id="seekFb" type="range" min="0" max="100" value="0">
+      </div>
+      <div id="ptime"><span id="tnow">0:00</span><span id="ttotal">0:00</span></div>
+    </div>
+    <div id="pctrl">
+      <span id="turnLabel"></span>
+      <div id="pbtns">
+        <div class="pbtn-wrap">
+          <div class="pbtn" id="prev">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6l-10 6 10 6z"/></svg>
+          </div>
+          <liquid-glass id="prevLg" mode="buttons" dpr="1.2"></liquid-glass>
+        </div>
+        <div class="pbtn-wrap main-wrap">
+          <div class="pbtn main" id="play"></div>
+          <liquid-glass id="playLg" mode="buttons" dpr="1.2"></liquid-glass>
+        </div>
+        <div class="pbtn-wrap">
+          <div class="pbtn" id="next">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6l10 6-10 6z"/></svg>
+          </div>
+          <liquid-glass id="nextLg" mode="buttons" dpr="1.2"></liquid-glass>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 排除 VIP（液态玻璃开关） -->
+  <div id="turn" class="glass">
+    <span id="turnText">轮到你了，搜一首点吧</span>
+    <span id="switches">
+      <span class="sw-wrap" id="swUser" onclick="toggleExclude('user')">
+        <span class="sw-box">
+          <liquid-glass id="exUserLg" class="sw-lg" mode="single-toggle"  dpr="1.2"></liquid-glass>
+          <span class="sw-fb"></span>
+        </span>
+        <span class="sw-lbl">排除VIP</span>
+      </span>
+      <span class="sw-wrap" id="swAi" onclick="toggleExclude('ai')">
+        <span class="sw-box">
+          <liquid-glass id="exAiLg" class="sw-lg" mode="single-toggle"  dpr="1.2"></liquid-glass>
+          <span class="sw-fb"></span>
+        </span>
+        <span class="sw-lbl">AI排除VIP</span>
+      </span>
+    </span>
+  </div>
+
+  <!-- 搜索 -->
+  <div id="searchbar" class="glass">
+    <input id="q" placeholder="搜索歌曲…" type="text">
+    <div class="search-btn-wrap">
+      <div class="iconbtn" id="doSearch">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      </div>
+      <liquid-glass id="searchLg" mode="buttons" dpr="1.2"></liquid-glass>
+    </div>
+  </div>
+  <div id="srcrow">
+    <span class="chip" id="srcKugou">酷狗</span>
+    <span class="chip" id="srcNetease">网易云</span>
+    <span id="searching" class="loading" style="display:none;">搜索中…</span>
+  </div>
+  <div id="results"></div>
+
+  <!-- 音效设置（液态玻璃混音台） -->
+  <div id="eqbar" class="glass">
+    <div class="eq-head">
+      <span class="eq-title" onclick="document.getElementById('eqBody').classList.toggle('open')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M6 12h12M9 18h6"/><circle cx="6" cy="6" r="2"/><circle cx="17" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg> 音效</span>
+      <span class="eq-presets">
+        <span class="chip eq-chip" id="eqOrig">原声</span>
+        <span class="chip eq-chip" id="eqD3">3D立体</span>
+        <span class="chip eq-chip" id="eqSur">3D环绕</span>
+        <span class="chip eq-chip" id="eqPhone">耳机</span>
+      </span>
+      <span class="eq-caret" onclick="document.getElementById('eqBody').classList.toggle('open')">▾</span>
+    </div>
+    <div id="eqBody">
+      <div class="eq-row"><span class="eq-lbl">低音</span><input class="eq-slider" id="eqLow" type="range" min="-12" max="12" value="0"><b id="eqLowV">0</b></div>
+      <div class="eq-row"><span class="eq-lbl">中音</span><input class="eq-slider" id="eqMid" type="range" min="-12" max="12" value="0"><b id="eqMidV">0</b></div>
+      <div class="eq-row"><span class="eq-lbl">高音</span><input class="eq-slider" id="eqHigh" type="range" min="-12" max="12" value="0"><b id="eqHighV">0</b></div>
+      <div class="eq-row"><span class="eq-lbl">混响</span><input class="eq-slider" id="eqReverb" type="range" min="0" max="100" value="0"><b id="eqReverbV">0</b></div>
+      <div class="eq-row"><span class="eq-lbl">3D深度</span><input class="eq-slider" id="eq3d" type="range" min="0" max="100" value="0"><b id="eq3dV">0</b></div>
+      <div class="eq-row"><span class="eq-lbl">湿音/干音</span><input class="eq-slider" id="eqWet" type="range" min="0" max="100" value="20"><b id="eqWetV">20</b></div>
+      <div class="eq-note">预设：3D立体 / 3D环绕（声场旋转）/ 耳机（虚拟声场）。安卓 12 以下玻璃可能变透明，音效不受影响。</div>
+    </div>
+  </div>
+
+  <!-- 点歌对话 -->
+  <div class="sec">点歌对话</div>
+  <div id="log" class="glass"><div class="empty">你点一首、AI 点一首，播放进度每 20 秒汇报给 AI。</div></div>
+
+  <!-- 队列 -->
+  <div class="sec">播放队列</div>
+  <div id="queue" class="glass"></div>
+
+  <!-- 聊天输入（液态玻璃发送键） -->
+  <div id="chatbar" class="glass">
+    <input id="cmsg" placeholder="和 AI 聊聊这首歌…" type="text">
+    <div id="send-wrap">
+      <liquid-glass id="sendLg" mode="buttons"  dpr="1.2"></liquid-glass>
+      <div id="send">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+<audio id="audio" preload="auto"></audio>
+<script>
+"use strict";
+/* GooseHyperGlass 折射背景：用户播放器同款内联极光图（开源项目 glass.goose.cc.cd 机制要求玻璃背后有背景才折射） */
+var LG_WALLPAPER = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAQDAwMDAgQDAwMEBAQFBgoGBgUFBgwICQcKDgwPDg4MDQ0PERYTDxAVEQ0NExoTFRcYGRkZDxIbHRsYHRYYGRj/2wBDAQQEBAYFBgsGBgsYEA0QGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBj/wAARCAQABAADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD70xS4paKVzYKKKKQBRRRinYAopcUtMVxMUtFFAgooooAKKKKACiiigAooooAKKKDQAh60lFFABRRRTRI09aKUikpiYU09adTTTQhp60hpaaTVITG02lPSkqkSwPSmHpTjTTVpEjTTKcxptWiRD1pp6UvekNUiWNPSmmnGmmqRDEpDS0h61ZI09aaacetNPWqASiiigkKKKKdgFApaKKQCgUtA6UUAKKWkFLUsoUdKWilApMQtOHSm04dKRSClHWkpR1pMY4daWkHWlpDQ4dKKKKkYU6m06kwCiiikUFOFIBS0AAp1IKWkxhRRRSEFFFOoGFFFFSMKUClxiigAooooHYKKKKBhRRS4oAWiiipJCiiigdgooooGFFLilxQA3FKBS0UAFFFFABRRRQFgooooHYKKKKAsFFFFAWCiiigLBRRRQFgooooFYKKKKAA9KTBpaKAG0U6kwKAEopcUlABRRRQAUUUUCsFIRS0UANooxRVDJqKKK5TqCiilApoBcUUUUyQooooAKKKKACiiigAooooAKKKKACiiigApD1pabQAUUUUCYUUUU0IKbTu1NpkhTDTjTT1poBD0ph6049KYetUhCGkpT1pKtEsQ009aU9aaatEDG60h6Up6009KtCEpp606m00QxD1pppx60w9atEMKbTqaelUIbTT1p1NPWqAKKKKaJClFJTqGAUUUUgHUUUDrQNDqUUlKKkBadTadSYwp1IKWkNBSikpwFSMUU4UlKOlJlC0UUUgCnUgpaTAKKKO9IodRRRQAopaBRUsAoFFKKAFooooYBSjrSUo6VJQtFFFABRRRQUFKBQBS0mxNhRRRSEFFFFBQUUUUAKKWkFLQAUUUUAFFFFABRRRQNBRRRQMKKKKACiiigAooooAKKKKACiiigAooooAKKKKBMKKKKBBRRRQAUUUUAIaSlPSkoAKKKKACiiigApCKWigCSiiisEjqCnDpTcU6mJhRRRQIKKKKACiiigAooooAKKKKACiiigAooooAQ0lKetAGaAEopSMUlOwmFFFFMliHpSUp60lAhD1plOpDVJANPWmHrTqaetUiRDSUHrRVohjT1ph6U+mE1SExnekPWlpp61aJA9KbTj0ptWiLjT1ptKelJVIlhTT0px6Uw9KYhKb3p1FUIbRR3p3amIQUtIOlLSYBSgUlOoAKUCkFOpMYU6kFLSAUUtIOlOFSMB0paKKGUFPHWmgU4CpBC04UgpaTKCiilApALRRRUjQUDrRThQMKUUlOpMaCiiikIKcOlNp1AwooopXBIUCloFFIYUUUUDSClApKd2pMGFFFFIQUUUUDSCiiigYUooxS0AFFFFABRRRQAUUUUDsFFKKWgLiYNGKWigLiYFLgUUUAGBRgUUUXAMCjAooouAYFGBRRRcAwKTApaKAExRg0tFAXG0U6kNAXEooooBoKKKKBBRRRQAUUUUAN70U7FJigBKKKKACiiigCSlxS0VidNwooooEFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFACYpcUUU0K4h60lFFMQUUUhoExKQ0tIetNCEppNKelNPWqQmJTaU9KaapEsSkPSlpD1qyWNPSmHmnNTapIljTxTaUmkq0QxD0pD0pT1pp6VSJGmkoPWiqRLENNNOPWmHrVIAoooqkSxMUtFFIAooooAUUtFFAxR0paKUVICgUCinAYpMYUopO9OpDQUUUopMYtOpBThSGgFLRRUjCnCkHWlpMAoooHWkUKBS0UAUAKBS0UVIBRRSgUAAFLRRSbGFKOtJTqQwooooAKKKUCgoBS0UVJIUUUUDQUUUo60DExTsUUUAFFFFABRRRQOwUUo60tACYowKWigQUUUUrjsFFFFIYUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUU7isJgUYpaKYDaKdSEUBcSiiigdgooooFYKKKKBBSYpaKAExSU6igCSiiisToCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooEwooopoQhFJTqbTAKQ9aWm0EhTaU9KSmhMQ9aYetOpp61YhD1pp60p6009apEsKaaU9KaelUSNPWkPSikJrQkaetJRR2qiGNPWmmnUw1QhKKKQ9KpEiU2lPSkqgCiiiglhRRRQAUopKdQAUopKdSYwp1IKWkAopaQUvepYxRS0UUFBThSCnCpAWnU0dadSZQUUUopALRRRUjQUoFAFLQMKcBSClpMYUUUUhCiloHSigAoopQKkoWiiigAoopRQUAFLRRUkhRRRQOwUUUoFAxMU7GKKKACiiigAoopQKBiUuKWigLhRRRSuFgooopXHYKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiincVhMUYpaKYDaKXFJigLhRRRQFgooooCwUUUUCJKKKKxOgKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigkKKKKaAKbTqbTEIaSlPWkoEIaaelOPWmmqRIlNpT0pp6VQhKbTj0ptWiWIetMNOPSmGrRLEpppT0ppqkSxKQ0tNPWqRAh6Uw9acTTaoTCkNLTatCEPWkoopgFFFFBIUUU4UAAGKKKKBoUUtFAqRju1AopRSYIWlFJTqQ0FFFKKTGKBTqQU4UhoAKWiipGFOpBS0mAUUUDrSKHUUUooAWiiipBhSjrSUooGLRRRUsEKBS0DpRQMKKKKCkFOHSm04dKTEwooopAgoooxQMUUtFFABRRRQAUUUUFB3p1IOtLQIKKKKkYUUUUAFFFFABRRS4oASilxS0ANwaXBpaKAEwaMGlooATBowaWigBMGjBpaKAEwaTBp1FADaKdRgUANopcUmDQAUUUUAFFFFABRRRQAUUUU7isNxRTqQii4xKKKKYBRRRQBJRRRWJsFFFFABRRRQAUUUUAFFFFABRRRQAUUuKWgVxuKKdSHrQFxKKXFJQIKKKKoTA9KbSmmmmISiiiiwmNPWkPWlpp61aQhDTTTj1pp61SRI00hpT1pp6VSJGmmnrSnrTatEiHrTD1pxptUiWB6U2lNNNUiRppKcelNqkiRD0pD0pT1ppqkAlFFFMTCiiigQDrTqQUtABSikp1JjClFJ3p1IYU6kFLUsBRS0UUFBThSDrThUgLSikpw6UmUFFFKKQC0UUVI0FKKSlHSgYtOpBS0mNBRRRSEFOHSm04dKGUFKBSU6pAKKKKBoKKKKBh3p1Np3akxMKKKKQwAzTqBRQAUUUUAFFFFBQUCilHShgLRRRUgFFFFABRRRQAUUuKWgBAKWiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACkxS0UANop1IRQAlFFFABRRRQAUUUUAFNxTqKdwG0UYopgSUUUVibBRRRQAUUUUAFFFFABRRRigAp2KKKBXCiiigQUUUUAFFFFOwmIaSlPSkpiGnrTT1p1NpoAoPSikPSmJiU2nHpTT0q0SxvemmnUw1SJYlNNOphqkSxD0ph6U4001SENPSkpTSVokQxDTD1pxNNpoliGkopD0qhCU2lPSkqgCiiigTCiilHWgELRRRQCAdadSClpMYopaQUtIBw6UopB0pw6VI0FFFHehjHDpTh0ptOHSpGgp1Np1SMKcOlNp1JgFFFFIoUdaWkFLQMd2oooqRhRRRQIB1p1IOtLQMUdaWkFLUgFFFFA0FFFFAwpw6U2nUAFA60Uo61IC0UUUAFFFFA0FFFFAwpQaSigB1FIDS1IBRRRQAUo6UlANADqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAMUmKWigBtFLikxQAUUUUAFFFFABSEUtFADqKKKzNgooooAKKKKACiilAoAAKWiigkKKKKACiiigAooopoAooopiYhpppT1pD1oEJTadTapCCkNLSHrTQhp6U09KcaaapEjT0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pVXAbikp1FA7iY4owaWimmO4A0UUU7lIKKKKYwpcA0lKOtMYYpR0oooGmFJilopplITFLRRRcYYoxS4oxTGhKKKKoYmKSnUUDuNopcUmKq47iYoxS0UANop1JigBuKSnUU7iG4pMU7FJTAbSEelOIpKdxjaKdim4pgFIRS0UCsNop1NxTuFwooopjCiiigBp60UppKACiiigBcmjJpKKAFzRmkooAdkUmaSigBcilyKbRQBrUUUZFeSclwopM0ZNAXFpM0lFArhS5NJRQSFFFFABmiiikxMKKKKQgooooAKKKKACiilAqgEpcUtFAwxRRRQFwooxS4oASlwaWigLCYpcUUUDCiiigLBRRS4NA7CUUuKMUBYSilwKXAoHYbRTqKAsNop1FAWG0U6igLDaKdgUmBQKwlFLijFAWEooxRQFhMUYpaKBDaKdRgUANpMU7FJQAmKSnUU7gNxSYp2KSgBuKTFOxSYouIbRTiKbimAUmKWigQ2inUmKdx3EooopjExRyKWigA60mKXFFNMBuKKdSYouO4goxS9DS0x3G0opcUmMGncpBik6GnUUygoooqrggooooKHdqTAoHSloKCiiincdwpMUtFO4XG4op1GKdwuNopcUYpjG4oxS0U7juNopcUmKdx3CkxS0UANoxTsUmKdwGYop1IR6UxDSKSnUhFO4xpFJTqQimAlFFFACEUlOpCKaYhKKKKYwNNp1IRQAlFFFABRRRQAZpMikop2AXIoyaSiiwC5NGTSUUwNaikzRmvHOLUWikzRmgQtFGaKACiiigAopMijNAC0U3NKOlAri0UUVIgooooAKMUoFLT2AMUUUUbgFFFLimAmKXFLRQOwUUUUDCiilxQOwlGDTqKBiYpcCiigdgopcUYoASinYFFADaXBpaKAEwaMGlooDUTBpMU6igBtFOooAbRTqKAG0U7ApMUAJRS4pKAsJijBpaKAsNop1JigVhKKMUUCsJikxTqKBDaKdim4oATFJTqKdwGEUlPIpKBWGEUlOIxRRcQ2ijFFMApMUtFADaKcRTcVVyrhRRRQAUUUUCCiiigaCiilHIpotMSilxSUx3CgdaKXrVDQtJilopopCAYpaKKCrhRS4owaYxKKKAM0AKBRilFFUUNop1JigBKKKKoBMUlOooAZikp+KSncY2ilxSUxiEUlOooAbim4p5FJTuA2m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UOBpabSg0ALSg0lFA0x1FNzinUFXFBpabRQA6iiigLhmnZptFA7js0uaaDS0DHUU3NLmgdxaKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKTNJQK4uaSjNITQAZpM0UUCCiiigVwpCaCaSgAoopCaAuBNJRRSJuFFFITTEBNJRRQSFFFJmlYAJpKKKYBRRRSAKKKKYBSgUlOoGgoopRQMUUUUUAFOpBS0FIKKKUUFAOlLRSgUyhRRRRQxoUUtFFCGFOpBS0ygooooAKKKKACiiimNBRRRTGFFFFACHrSUp60lABRRRQAUh6UtIaECEoooPSqGxtFFFAgoooqgENJSnrSUDYUh6UtIaBCUUUU0AHpTaU9KSmAUUUh60ALSHpSUUDsUM0tNoqLHAOopM0tIBQaWm0oNArC06m0vSlYY4GnA0ynCpAdRSA0tIBQaWm0oNADwacDUdOpAPBpaaDSg0ihwNLTaUGgBaKKKB3HZoptKDQO4tLmkooHuOopAaWgAooooGLmlptFADqXNNzRkUDH5FFNooC46ikyaM0BcWikzS5FAwooooAKKTIozQAtFJmjJoFcWjIptFAXFzSUmaTJoEOzSZpKKACiiigAoopCaBC0hNJRQGwUZpCaSgQZooooFcKKM02gm4pNJRRSuIKKKQmiwATSUUUwCiiigAooooAKKKKAFFLQOlFBQU6kApaACiilFA0LRRRQWFOFIBS00NBThSClpjClFIKdUlBRRSimNC0UUUxhRRRQAUUUUAFFFFNFBRRRTAKKKKAGnrRRRQAUUUUAFIetLTe9NDQUh6UtIaYMSiiigQUUUHpVANooooGwpDS0h60CEoooqgENJRRQAU09aU9KSgaCiiigZnZpabRSscNh1GaTNLSFYcKKbThSaEKDS02lBpAOFKKbThUsB1KDTQaWkA6igGikA4GgdabTqAHUoNNFLUgPBpaYDTgaB3HA0tNooAdRRmigYoNLTaKCh1LmkBooHcdRTaXNAWFooooC4UUUUDClzSUUAOoptFADqKbRQA6im0UAOoptFADqD0ptFAC5pKKKACiiigAooooFcKM0maSgLCk0lFITQFxaQmkooEFFFFBIUhNBNJQK4UUUUhBRmkJpKYCk0lFFABRRRQK4UUUUBcKKKKBhQOtFKOlA0LRRSgUDFooooBCgUtFFBaCiilAoGLRRSgUyhaKKUChjQoooooQwp1IBS0IoKKKKYBRRRQAUUUUFBRRRTQBRRRTAKQ9KWkNACUUUUAFFFFAAelNpTSU0NBTT1px6U2mDCiiihCCkNLTT1qhoKKKKBBTacelNpoAoPSikNMEJRRRQAhpKD1ooKQUUUUAZmaWm0Zp2OKw6lzSZopCHUUgNLSsKw4Gik+lLUtCFBpR1ptOBqQHUoNNBpaQDqXNNBpaTAdSjrTB1p1IB1KDTQaWgB1KDSUd6kB4NLTaKB3HUoNJRQGw6ikBpaBhSg0lFIdx1FNpQaYxwNLTaXNAC0UmRS0AFFFFA7hRRRQFwooooHcKKKKACiiigVwooooC4UUUUBcKKKTIoELSE0ZpKACikJpKAFzSUUUhXCiikzTEKTim0UUE3CiikJpALSZpKKYBRRRQK4UUmeaQnNK4Ds0U3vTs8UCCikFLTAKKKKCgHWnUgFLQNBTqQUtAwpRSU6gpBRRRQUKOtLRRTRSFApaKKBhTqQdKWkMKBRThTGgooopjCiiigAooooGgooooGFFFFNAFFFFMApp6049KbQAUUUUAFFFB6UANoooqihDSUp60lBIUUUU0AHpTaU0lMYUUUUCENJSnrSU0AU09adTaYwo7UUh6UCEooooKCiiigDLoooqjjClzSUUAOpQaQUUmSOpehpoNLUsTHUopoNLUCHUCkFLSYDqdTAacDUsQtKDSUDrSC48daWm0oNIY4UtNpw6UCFBpabSg0hi06m0UAOpQaSigB1FIDS0FBRRRSHcXNLTaM0xjqM0maWgYuaXIptFADqKB0ooEFFFFABRRRQAUUUUAFFFB6UAJkUZpKKB6BRRSZoELSZpM0UAFFFFArhRRSGgQE0lFFDJCig9KbSAUmkoopgFFFITQSGaTNFFSAUUUUAFFFFMEKKWkFLQhhRRRTGOHSijtQOtAxw6UUUUDQoFLQOlFBaClFJTh0oKQUopKcOlMYUAZopR0oY0LRRSigYYpaKKZQUUUUAFFFFA0FFFFAwooooAKKKKoAoooPSgBD1pKKKACiiigApD0paQ9aaGhKKKD0pgxp60UUUCCiiiqQCGkoPWigYUUUHpQIbRRRVAIaSlPWkoADTc5pTSUDQUUUU0MKKKKYGTmnCm0A4qmjkY6iiipEFOptKDQJi06m0oqWIWnU2lFQyRadTacOlITCnDrTadUgOopAaWpEKDS00dadQO46gdaQdKXvUhcdQOtFHegQ6iiigaHDpRSZpaBhSikopXAdRSZpaZQUUUUAFLmkopFDqKbSg9qYC0uaSikAuaMikoo1AdRTaKAFyKM0lFGoC5pKKKACikJpKYCk0lFFIAooopkhRRmkzQAlFFFK5IUUUZoAQ9KSiimAUE0maSlcQUUUUhBRRRTsAUUd6KYBRRRSYCilpBS0IApR1pKUdaZQtKOtJSjpQMWlHWkpR1oKQtFFFBaADNOpB0paaKQopaKKBigUtA6UUhigUtFFMYUUUUIYUUUUwQUUUUFBRRRQAUUUU0AUUUUwCkPWlPSm0AFFFFABRRRQAU2lNJTQ0FIaWm0wYUUUUIQUHpRSGqASiiigGFNPWnHpTaACg9KKQ1QCUUUHpQA2iiigoKKKKaAKaetOPSm0xMy6KKKuxzAOtOptOzSEwoooqRDqKQGlpMkdSjrTQaWoYmOpQaaKWpEOoHWgdKB1pMkdSg0lFQA6nUwGlpAPFLTQaUGkA+img4p1ABTqbS5oAWiiigoUUtIKWkAUopKKYDqKTNLQUFFFFABRRRQO4uaM0lFAx2RRmm0UAOopMmjJoAXIoyKbRQAuaM0lFABRRRQK4UUUUCCiikzQAHrSUUUEhRRRmkAU09aUmkpgFB6UUhNBIlFFFSAUUZpuaewDiaTNJRRcaDvQTmiikMUHmlpo606n0ExRS0gpaEIKUdaSlAplCjrTqQdaWgaClHSkp1ItBRRSjrTKFFKBSAZp1MoKKKUChjQtKBQBS0igooooGFFFFNAFFFFMaCiindqBjaKKKaAKKKKYBRRSE0AITRRRQAUUUUAFFFIelACUUUVRQh6UlKetJQSFFFFNAFNPWnU2mMKKKKBCGkoopoAptKelJTAKQ9KWkPWgaEooooGFFFFUAhpKU9aSgln//Z';
+var bgLight = document.getElementById("bgLight");
+if(bgLight) bgLight.style.backgroundImage = "url(" + LG_WALLPAPER + ")";
+
+/* SVG 图标 */
+var SVG_PLAY = '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+var SVG_PAUSE = '<svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+var SVG_NOTE = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+var SVG_VIP = '<span class="vip">VIP</span>';
+
+/* ================= 内嵌 API 配置（应用启动/每次修改设置时由 MusicServer 实时写入） ================= */
+window.__LQ_CFG = __LQ_API_JSON__;
+
+/* ================= 角色信息（应用内本地服务器同源 /api/config） ================= */
+var CONFIG = { characterName:"灵伴" };
+fetch("/api/config").then(function(res){ return res.json(); }).then(function(j){
+  CONFIG = j || CONFIG;
+  var model = j && j.model ? j.model : "";
+  document.getElementById("sub").textContent = "轮流点歌 · 与 " + (CONFIG.characterName || "灵伴") + " · 酷狗 / 网易云";
+  var note = document.getElementById("note");
+  if(!model){
+    document.getElementById("ttl").innerHTML = "<h1>AI 一起听</h1><p id=\"sub\">轮流点歌 · 与 " + (CONFIG.characterName || "灵伴") + " · 酷狗 / 网易云</p>";
+    if(note && !note.textContent) note.textContent = "未读取到 AI 配置：请在设置页填写 API URL / Key / 模型";
+  } else {
+    document.getElementById("ttl").innerHTML = "<h1>AI 一起听</h1><p id=\"sub\">当前模型：" + model + "</p>";
+  }
+}).catch(function(){ console.log("config fetch err"); });
+
+/* ================= 工具 ================= */
+function esc(s){ return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function fmt(ms){
+  if(!ms || ms <= 0) return "0:00";
+  var s = Math.floor(ms/1000);
+  return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0");
+}
+async function chatOnce(messages, maxTokens){
+  // 独立超时：直连 18s，本地转发 25s，失败立即返回明确信息，绝不无限转圈
+  var ctrl1 = new AbortController();
+  var t1 = setTimeout(function(){ try{ ctrl1.abort(); }catch(e){} }, 18000);
+  try {
+    var cfg = window.__LQ_CFG || {};
+    var useDirect = cfg.key && cfg.url;
+    if(useDirect){
+      try {
+        var base = String(cfg.url).replace(/\/+$/,"");
+        if(base.indexOf("/v1") < 0) base += "/v1";
+        var res = await fetch(base + "/chat/completions", {
+          method:"POST",
+          headers: { "Content-Type":"application/json", "Authorization":"Bearer " + cfg.key },
+          body: JSON.stringify({ model: cfg.model, messages: messages, max_tokens: maxTokens || 120, stream:false }),
+          signal: ctrl1.signal
+        });
+        if(res.ok){
+          var rj = await res.json();
+          var reply = (rj.choices && rj.choices[0] && rj.choices[0].message && rj.choices[0].message.content) || "";
+          if(reply) return reply;
+        } else {
+          var errj = await res.json().catch(function(){ return {}; });
+          throw new Error((errj.error && errj.error.message) || ("HTTP " + res.status));
+        }
+      } catch(e){
+        if(e.name === "AbortError") throw new Error("回复超时：模型响应太慢或网络不稳定，稍后再试");
+      }
+    }
+    // 本地转发兜底（独立超时，不被直连的 abort 影响）
+    var ctrl2 = new AbortController();
+    var t2 = setTimeout(function(){ try{ ctrl2.abort(); }catch(e){} }, 25000);
+    try {
+      var res2 = await fetch("/api/chat", {
+        method:"POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({ messages: messages, maxTokens: maxTokens || 120 }),
+        signal: ctrl2.signal
+      });
+      var j2 = await res2.json();
+      if(j2.error) throw new Error(friendlyErr(j2.error));
+      return j2.reply || "";
+    } catch(e){
+      if(e.name === "AbortError") throw new Error("回复超时：模型响应太慢或网络不稳定，稍后再试");
+      throw e;
+    } finally { clearTimeout(t2); }
+  } finally { clearTimeout(t1); }
+}
+function friendlyErr(s){
+  s = String(s || "");
+  if(/timed out|timeout/i.test(s)) return "回复超时：模型响应太慢或网络不稳定，稍后再试";
+  if(/尚未配置/.test(s)) return s;
+  return s;
+}
+
+/* ================= 音乐接口（应用内本地服务器代理：无 CORS / 防盗链） ================= */
+async function searchKugou(kw, limit){
+  var res = await fetch("/api/search?q=" + encodeURIComponent(kw) + "&source=kugou&limit=" + (limit || 30));
+  var j = await res.json();
+  if(j.error) throw new Error(j.error);
+  return j.list || [];
+}
+async function searchNetease(kw, limit){
+  var res = await fetch("/api/search?q=" + encodeURIComponent(kw) + "&source=netease&limit=" + (limit || 30));
+  var j = await res.json();
+  if(j.error) throw new Error(j.error);
+  return j.list || [];
+}
+async function kugouUrl(hash, albumId){
+  var res = await fetch("/api/resolve?token=" + encodeURIComponent(hash) + "&source=kugou&album_id=" + encodeURIComponent(albumId || "0"));
+  var j = await res.json();
+  if(!j.url) throw new Error(j.error || "无法获取播放地址（可能为 VIP/付费）");
+  return j.url;
+}
+async function neteaseUrl(id){
+  var res = await fetch("/api/resolve?token=" + encodeURIComponent(id) + "&source=netease");
+  var j = await res.json();
+  if(!j.url) throw new Error(j.error || "无法获取播放地址（可能为 VIP/付费或需登录）");
+  return j.url;
+}
+async function resolveUrl(t){
+  return t.source === "kugou" ? kugouUrl(t.id, t.albumId || "0") : neteaseUrl(t.id);
+}
+
+/* ================= 状态 ================= */
+var queue = [], currentIdx = -1;
+var turn = "ai", aiPicking = false, aiBusy = false, playing = false;
+var excludeVipUser = false, excludeVipAi = false;
+var chatLog = [];
+var source = "kugou", lastReport = -1, lastSearchResults = null;
+var audio = document.getElementById("audio");
+/* 对齐用户自研播放器（main.js 2664 行）：必须开启 CORS，
+   否则 createMediaElementSource 接管音效时会抛异常导致"在播但无声" */
+audio.crossOrigin = "anonymous";
+
+/* ================= 渲染 ================= */
+function renderPlayer(){
+  var q = queue[currentIdx];
+  var playBtn = document.getElementById("play");
+  if(!q){
+    document.getElementById("songname").textContent = "还没有在放歌";
+    document.getElementById("artist").textContent = "AI 正在点今天的第一首歌…";
+    document.getElementById("note").textContent = "";
+    playBtn.innerHTML = SVG_PLAY;
+    return;
+  }
+  var t = q.track;
+  document.getElementById("name").innerHTML =
+    '<span id="songname">' + esc(t.name) + '</span>' + (t.isVip ? SVG_VIP : "");
+  document.getElementById("artist").textContent = t.artist || "未知歌手";
+  var note = "";
+  if(q.state === "failed") note = "播放失败（可能为 VIP/付费）";
+  else note = (q.by === "user" ? "你点的" : "AI 点的") + " · " + fmt(t.durationMs);
+  document.getElementById("note").textContent = note;
+  playBtn.innerHTML = audio.paused ? SVG_PLAY : SVG_PAUSE;
+  try { var plg = document.getElementById("playLg");
+    if(plg && plg.setButtons) plg.setButtons([{ id:"play", label:"", style: audio.paused ? "transparent" : "blue" }]);
+  } catch(e){}
+}
+function renderQueue(){
+  var box = document.getElementById("queue");
+  if(!queue.length){ box.innerHTML = ""; return; }
+  box.innerHTML = queue.map(function(q, i){
+    var t = q.track, cur = i === currentIdx;
+    var st = q.state === "failed" ? "播放失败" : (cur ? "播放中" : "");
+    return '<div class="qrow ' + (cur ? "cur" : "") + '">' +
+      '<span class="tag ' + (q.by === "user" ? "me" : "ai") + '">' + (q.by === "user" ? "你" : "AI") + '</span>' +
+      '<span class="qn">' + esc(t.name) + '</span>' + (t.isVip ? SVG_VIP : "") +
+      '<span class="qstate">' + st + '</span></div>';
+  }).join("");
+}
+function addLog(role, text){
+  chatLog.push({ role:role, text:text });
+  var box = document.getElementById("log");
+  box.querySelector(".empty") && box.querySelector(".empty").remove();
+  var d = document.createElement("div");
+  d.className = "msg " + (role === "user" ? "me" : "ai");
+  d.innerHTML = '<div class="bubble">' + esc(text) + '</div>';
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+function notice(t){ document.getElementById("note").textContent = t; }
+function setTurn(){
+  var el = document.getElementById("turnText");
+  if(playing) el.textContent = "正在播放，播完自动轮到下一位点歌…";
+  else if(aiPicking) el.textContent = "轮到 AI 点歌… AI 正在挑";
+  else if(turn === "ai") el.textContent = "轮到 AI 点歌…";
+  else el.textContent = "轮到你了，搜一首点吧";
+}
+function setSearching(on){ document.getElementById("searching").style.display = on ? "" : "none"; }
+function renderResults(list){
+  var box = document.getElementById("results");
+  if(!list){ box.innerHTML = ""; return; }
+  if(!list.length){ box.innerHTML = '<div class="empty">没有结果</div>'; return; }
+  box.innerHTML = list.map(function(t){
+    return '<div class="res ' + (t.isVip ? "vip" : "") + '" data-i="' + esc(t.id) + '">' +
+      '<span class="ricon">' + SVG_NOTE + '</span>' +
+      '<div class="rn"><b><span class="t">' + esc(t.name) + '</span>' + (t.isVip ? SVG_VIP : "") + '</b>' +
+      '<i>' + esc(t.artist || "未知歌手") + ' · ' + fmt(t.durationMs) + ' · ' + (t.source === "kugou" ? "酷狗" : "网易云") + '</i></div></div>';
+  }).join("");
+}
+document.getElementById("results").addEventListener("click", function(ev){
+  var r = ev.target.closest(".res");
+  if(!r) return;
+  var id = r.getAttribute("data-i");
+  var t = (lastSearchResults || []).find(function(x){ return x.id === id; });
+  if(t) userPick(t);
+});
+
+/* ================= 播放（一首一首，播完才轮换） ================= */
+function playAt(idx){
+  if(idx < 0 || idx >= queue.length) return;
+  currentIdx = idx;
+  var q = queue[idx];
+  renderPlayer(); renderQueue();
+  if(q.state === "failed") return;
+  var t = q.track;
+  notice("解析播放地址…");
+  resolveUrl(t).then(function(url){
+    q.track.playUrl = url;
+    q.state = "playing";
+    playing = true;
+    setTurn();
+    audio.src = url;
+    audio.play().then(function(){
+      renderPlayer(); renderQueue(); renderFill();
+      reportNow();
+    }).catch(function(e){
+      q.state = "failed"; renderPlayer(); renderQueue();
+      notice("播放失败：" + (e && e.message ? e.message : "未知错误"));
+      setTimeout(function(){ nextTurn(); }, 1200);
+    });
+  }).catch(function(e){
+    q.state = "failed";
+    renderPlayer(); renderQueue();
+    notice("播放失败：" + (e && e.message ? e.message : "未知错误"));
+    setTimeout(function(){ nextTurn(); }, 1200);
+  });
+}
+function enqueue(t, by){
+  queue = [{ track:t, by:by, state:"waiting" }];  // 每轮只点一首，播完才轮到下一位
+  currentIdx = -1;
+  playAt(0);
+}
+function nextTurn(){
+  audio.pause();
+  try { audio.removeAttribute("src"); } catch(e){}
+  queue = []; currentIdx = -1;
+  playing = false;
+  lastReport = -1;
+  renderPlayer(); renderQueue(); renderFill();
+  if (turn === "user") { turn = "ai"; setTurn(); aiPick(); }
+  else { turn = "user"; setTurn(); notice("轮到你了，搜一首点吧"); }
+}
+document.getElementById("prev").onclick = function(){ notice("一首一首播，播完才轮到下一位"); };
+document.getElementById("next").onclick = function(){ nextTurn(); };
+document.getElementById("play").onclick = function(){
+  if(currentIdx < 0) return;
+  if(audio.paused) audio.play(); else audio.pause();
+};
+document.getElementById("seekFb").oninput = function(){
+  var p = parseInt(this.value || "0", 10);
+  if(audio.duration) audio.currentTime = audio.duration * (p / 100);
+};
+audio.ontimeupdate = function(){
+  renderFill();
+  syncSeek();
+};
+audio.onended = function(){ nextTurn(); };
+function audioFailMsg(){
+  var src = audio.currentSrc || audio.src || "";
+  if(src.indexOf("/api/audio") < 0) return "无法加载音频（可能是网络问题）";
+  return new Promise(function(res){
+    var x = new XMLHttpRequest();
+    try { x.open("GET", src, true); } catch(e){ res("无法获取音频流"); return; }
+    x.onreadystatechange = function(){
+      if(x.readyState >= 2){
+        // 只读响应头与前部内容（错误 JSON 很小），立即中止，不拉完整音频流
+        var t = "";
+        try { t = x.responseText || ""; } catch(e){}
+        x.abort();
+        var err = "";
+        try { err = JSON.parse(t).error || ""; } catch(e){ err = ""; }
+        res(err || "无法获取音频流（可能为 VIP/需登录或版权受限）");
+      }
+    };
+    x.onerror = function(){ res("无法连接音频服务"); };
+    x.send();
+  });
+}
+audio.onerror = function(){
+  var q = queue[currentIdx];
+  if(q){ q.state = "failed"; renderPlayer(); renderQueue(); }
+  audioFailMsg().then(function(msg){
+    notice("播放失败：" + msg);
+    setTimeout(function(){ nextTurn(); }, 1500);
+  });
+};
+function renderFill(){
+  var p = audio.duration ? (audio.currentTime / audio.duration) : 0;
+  document.getElementById("tnow").textContent = fmt(audio.currentTime * 1000);
+  document.getElementById("ttotal").textContent = audio.duration ? fmt(audio.duration * 1000) : fmt(queue[currentIdx] && queue[currentIdx].track.durationMs);
+  var fb = document.getElementById("seekFb");
+  if(fb && document.documentElement.classList.contains("no-lg2")) fb.value = Math.round(p * 100);
+}
+
+/* ================= 20 秒进度汇报 ================= */
+function reportNow(){
+  if(currentIdx < 0 || !queue[currentIdx]) return;
+  var q = queue[currentIdx];
+  if(q.state !== "playing") return;
+  var sec = Math.floor(audio.currentTime || 0);
+  if(sec === lastReport) return;
+  lastReport = sec;
+  var t = q.track, tag = t.isVip ? "VIP 歌曲" : "免费歌曲";
+  addLog("ai", "播放进度：正在播放《" + t.name + "》- " + (t.artist||"未知歌手") + "（" + tag + "），已播放 " + sec + " 秒");
+  aiBusy = true;
+  chatOnce([
+    { role:"system", content:"你是「" + CONFIG.characterName + "」（角色设定：" + (CONFIG.persona || "活泼温暖的音乐伙伴") + "），是 AI 一起听陪听员，和用户一起听歌。请简短回应（30 字以内），点评这首歌或聊点相关的。" },
+    { role:"user", content:"当前正在播放《" + t.name + "》- " + (t.artist||"未知歌手") + "（" + tag + "），已播放 " + sec + " 秒。" }
+  ], 60).then(function(reply){
+    addLog("ai", reply.trim());
+  }).catch(function(){
+    addLog("ai", "（进度已记录：" + sec + " 秒）");
+  }).finally(function(){ aiBusy = false; });
+}
+setInterval(function(){
+  var q = queue[currentIdx];
+  if(!q || q.state !== "playing") return;
+  if(Math.floor(audio.currentTime || 0) - lastReport >= 20) reportNow();
+}, 2000);
+
+/* ================= 轮流点歌 ================= */
+function aiPick(){
+  if(aiPicking || aiBusy || playing) return;
+  if(turn !== "ai") return;                 // 严格轮换：没轮到 AI 不点
+  aiPicking = true; setTurn();
+  addLog("ai", "AI 正在点歌…");
+  var last = queue[currentIdx] && queue[currentIdx].track;
+  var sys = "你是「" + CONFIG.characterName + "」，角色设定：" + (CONFIG.persona || "活泼温暖的音乐伙伴") + "。你是 AI 一起听点歌员，正在和用户玩「轮流点歌」：用户点一首，你点一首。\n" +
+    "规则：轮到你时，只回复一首歌，格式严格为：歌名-歌手（例如：晴天-周杰伦），不要任何多余文字。\n" +
+    (excludeVipAi ? "你被要求排除 VIP 歌曲：只选免费可播的歌曲。\n" : "");
+  var usr = "轮到你点歌了。" + (last ? "上一首播放的是《" + last.name + "》- " + (last.artist||"未知歌手") + (last.isVip ? "（VIP 歌曲）" : "（免费歌曲）") + "。" : "") + "请点一首歌（格式：歌名-歌手）";
+  chatOnce([{ role:"system", content:sys }, { role:"user", content:usr }], 60).then(function(reply){
+    reply = (reply||"").trim();
+    var m = reply.match(/^(?:《)?([^《》\-—–\s]+(?:[^《》\-—–]*[^《》\-—–\s])?)[-—–]\s*(.+)$/);
+    var namePart, artistPart;
+    if(m){ namePart = m[1]; artistPart = m[2]; }
+    else if(reply.indexOf("-") > 0){ var sp = reply.split("-"); namePart = sp[0].trim(); artistPart = sp.slice(1).join("-").trim(); }
+    else { addLog("ai", reply); notice("AI 回复格式不对，已自动跳过，轮到你了"); aiPicking = false; setTurn(); turn = "user"; return; }
+    return searchPlay(namePart + " " + artistPart, true, namePart);
+  }).then(function(){ aiPicking = false; setTurn(); })
+    .catch(function(e){
+      addLog("ai", "AI 点歌失败（" + (e && e.message ? e.message : "未知错误") + "），已自动跳过，轮到你了");
+      aiPicking = false; setTurn(); turn = "user";
+    });
+}
+async function searchPlay(kw, isAi, preferName){
+  var list = null;
+  try { list = await searchKugou(kw, 10); } catch(e){}
+  if(!list || !list.length){ try { list = await searchNetease(kw, 10); } catch(e){} }
+  if(!list || !list.length){
+    if(isAi){ addLog("ai", "没搜到《" + kw + "》，已自动跳过，轮到你了"); notice("搜索无结果：" + kw); turn = "user"; setTurn(); }
+    else notice("搜索无结果");
+    return;
+  }
+  if(isAi){
+    var c = preferName ? list.find(function(t){ return t.name.indexOf(preferName) >= 0; }) : null;
+    if(!c) c = list[0];
+    if(excludeVipAi){ c = list.find(function(t){ return !t.isVip; }) || c; }
+    addLog("ai", "AI 点了：《" + c.name + "》- " + (c.artist||"未知歌手") + (c.isVip ? "（VIP 歌曲）" : "（免费歌曲）"));
+    enqueue(c, "ai");
+    // turn 保持 "ai"：这首播完 nextTurn 才切给用户
+  } else { return list; }
+}
+function userPick(t){
+  if(playing){ notice("正在播放中，等这首播完才轮到点歌"); return; }
+  if(turn !== "user"){ notice("还没轮到你点歌，等 AI 这首播完"); return; }
+  if(excludeVipUser && t.isVip){ notice("已开启「排除 VIP」，请选择免费歌曲"); return; }
+  notice("");
+  addLog("user", "我点一首：" + t.name + " - " + (t.artist||"未知歌手"));
+  var tag = t.isVip ? "（VIP 歌曲）" : "（免费歌曲）";
+  enqueue(t, "user");
+  addLog("ai", "已开始播放《" + t.name + "》- " + (t.artist||"未知歌手") + " " + tag + "，这首播完轮到 AI 点歌。");
+  // turn 保持 "user"（当前是用户点的歌在播），播完 nextTurn 才切给 AI
+}
+
+/* ================= 搜索交互 ================= */
+function doSearch(){
+  var kw = document.getElementById("q").value.trim();
+  if(!kw) return;
+  setSearching(true);
+  var fn = source === "kugou" ? searchKugou : searchNetease;
+  fn(kw, 30).then(function(list){
+    list = list || [];
+    if(excludeVipUser) list = list.filter(function(t){ return !t.isVip; });
+    lastSearchResults = list;
+    renderResults(list);
+    setSearching(false);
+  }).catch(function(e){
+    renderResults(null);
+    setSearching(false);
+    notice("搜索失败：" + (e && e.message ? e.message : "未知错误"));
+  });
+}
+document.getElementById("doSearch").onclick = doSearch;
+document.getElementById("q").addEventListener("keydown", function(e){ if(e.key === "Enter") doSearch(); });
+function setSrc(s){
+  source = s;
+  document.getElementById("srcKugou").classList.toggle("on", s === "kugou");
+  document.getElementById("srcNetease").classList.toggle("on", s === "netease");
+}
+document.getElementById("srcKugou").onclick = function(){ setSrc("kugou"); };
+document.getElementById("srcNetease").onclick = function(){ setSrc("netease"); };
+setSrc("kugou");
+
+/* ================= 排除 VIP 开关（原生点击切换，glasskit 只渲染玻璃外观） ================= */
+var excludeState = { user:false, ai:false };
+function setExcludeUser(on){
+  excludeVipUser = on; excludeState.user = on;
+  var w = document.getElementById("swUser");
+  if(w) w.classList.toggle("on", on);
+  notice(on ? "已开启「排除 VIP」：搜索结果将隐藏 VIP 歌曲" : "已关闭「排除 VIP」");
+}
+function setExcludeAi(on){
+  excludeVipAi = on; excludeState.ai = on;
+  var w = document.getElementById("swAi");
+  if(w) w.classList.toggle("on", on);
+  notice(on ? "已开启「AI 排除 VIP」：AI 只点免费歌曲" : "已关闭「AI 排除 VIP」");
+}
+function toggleExclude(which){
+  if(which === "user") setExcludeUser(!excludeState.user);
+  else setExcludeAi(!excludeState.ai);
+}
+
+/* ================= 聊天 ================= */
+function sendChat(){
+  var box = document.getElementById("cmsg");
+  var t = box.value.trim();
+  if(!t || aiBusy) return;
+  addLog("user", t);
+  box.value = "";
+  aiBusy = true;
+  var hist = chatLog.slice(-12).map(function(m){ return { role:m.role === "user" ? "user" : "assistant", content:m.text }; });
+  hist.push({ role:"user", content:t });
+  chatOnce([{ role:"system", content:"你是「" + CONFIG.characterName + "」（角色设定：" + (CONFIG.persona || "活泼温暖的音乐伙伴") + "），正在和用户一起听歌。语气符合角色人设，回复简洁有温度。" }].concat(hist), 200)
+    .then(function(r){ addLog("ai", (r||"").trim()); })
+    .catch(function(e){ addLog("ai", "回复失败：" + (e && e.message ? e.message : "未知错误")); })
+    .finally(function(){ aiBusy = false; });
+}
+document.getElementById("send").onclick = sendChat;
+document.getElementById("cmsg").addEventListener("keydown", function(e){ if(e.key === "Enter") sendChat(); });
+
+/* ================= 返回（左上角） ================= */
+document.getElementById("back").onclick = function(){
+  try { if(audio){ audio.pause(); audio.src = ""; } } catch(e){}
+  try { if(window.TogetherBridge) window.TogetherBridge.exit(); } catch(e){}
+};
+
+/* ================= 音效引擎（Web Audio：EQ / 混响 / 3D 声场） ================= */
+/* 关键：音频链必须保证 master → destination 永远连通，且 AudioContext 立即 resume，
+   否则 createMediaElementSource 接管后 audio 元素会"在播但无声" */
+var actx = null, eqN = {}, eqState = { low:0, mid:0, high:0, reverb:0, d3:0, wet:20 };
+function makeImpulse(seconds, decay){
+  var rate = actx.sampleRate, len = rate * seconds, buf = actx.createBuffer(2, len, rate);
+  for(var c=0;c<2;c++){
+    var d = buf.getChannelData(c);
+    for(var i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, decay);
+  }
+  return buf;
+}
+/* 惰性接管：默认 audio 直连扬声器保证有声；用户开音效时才接管进音频链 */
+function ensureAudioGraph(){
+  if(actx){
+    if(actx.state === "suspended") actx.resume();   // 用户手势内恢复，防无声
+    return true;
+  }
+  if(!audio || !audio.src) return false;
+  initAudioGraph();
+  if(actx && actx.state === "suspended") actx.resume();
+  return !!actx;
+}
+function initAudioGraph(){
+  if(actx) return;
+  try {
+    actx = new (window.AudioContext||window.webkitAudioContext)();
+    var src = actx.createMediaElementSource(audio);
+    eqN.low  = actx.createBiquadFilter(); eqN.low.type = "lowshelf"; eqN.low.frequency.value = 200;
+    eqN.mid  = actx.createBiquadFilter(); eqN.mid.type = "peaking"; eqN.mid.frequency.value = 1000; eqN.mid.Q.value = 0.8;
+    eqN.high = actx.createBiquadFilter(); eqN.high.type = "highshelf"; eqN.high.frequency.value = 8000;
+    eqN.conv = actx.createConvolver(); eqN.conv.buffer = makeImpulse(2.6, 2.2);
+    eqN.pan  = actx.createStereoPanner();
+    eqN.dry  = actx.createGain(); eqN.wet = actx.createGain();
+    eqN.master = actx.createGain(); eqN.master.gain.value = 1;
+    // 主链：src -> EQ -> pan -> dry/wet -> master -> destination（永远连通）
+    src.connect(eqN.low); eqN.low.connect(eqN.mid); eqN.mid.connect(eqN.high);
+    eqN.high.connect(eqN.pan);
+    eqN.pan.connect(eqN.dry); eqN.dry.connect(eqN.master);
+    eqN.pan.connect(eqN.conv); eqN.conv.connect(eqN.wet); eqN.wet.connect(eqN.master);
+    eqN.master.connect(actx.destination);
+    // 立即 resume：用户手势内调用，否则浏览器挂起 AudioContext → 无声
+    if (actx.state === "suspended") actx.resume();
+    setEQ();
+  } catch(e){
+    /* 接管失败：重置 actx，audio 保持直连（仍出声），音效下次操作自动重试 */
+    actx = null; eqN = {};
+    console.log("audio graph err", e);
+  }
+}
+function setEQ(){
+  if(!actx) return;
+  eqN.low.gain.value = eqState.low;
+  eqN.mid.gain.value = eqState.mid;
+  eqN.high.gain.value = eqState.high;
+  var wetLevel = eqState.wet / 100, rev = eqState.reverb / 100;
+  eqN.wet.gain.value = wetLevel * rev * 1.4;
+  eqN.dry.gain.value = Math.max(0.08, 1 - wetLevel * rev);   // 干声保底 8%，绝不全静音
+  eqN.master.gain.value = 1;
+}
+/* 3D 环绕：StereoPanner LFO 自动摆头（不用 PannerNode，距离模型在 WebView 上易出无声） */
+var surroundAngle = 0, surroundOn = false;
+(function rotLoop(){
+  if(actx && surroundOn){
+    surroundAngle += 0.035;
+    eqN.pan.pan.value = Math.sin(surroundAngle) * 0.85;      // 左右横摆
+  }
+  requestAnimationFrame(rotLoop);
+})();
+function applyPreset(p){
+  var s = eqState, el = function(id, v){ var e = document.getElementById(id); if(e) e.value = v; };
+  if(p === "orig"){ s.low=s.mid=s.high=s.reverb=s.d3=0; s.wet=20; surroundOn=false; }
+  else if(p === "d3"){ s.low=0; s.mid=0; s.high=2; s.reverb=45; s.d3=35; s.wet=40; surroundOn=false; }
+  else if(p === "sur"){ s.low=0; s.mid=0; s.high=0; s.reverb=30; s.d3=70; s.wet=30; surroundOn=true; }
+  else if(p === "phone"){ s.low=3; s.mid=-1; s.high=2; s.reverb=15; s.d3=0; s.wet=30; surroundOn=false; }
+  el("eqLow",s.low); el("eqMid",s.mid); el("eqHigh",s.high); el("eqReverb",s.reverb); el("eq3d",s.d3); el("eqWet",s.wet);
+  document.getElementById("eqLowV").textContent=s.low; document.getElementById("eqMidV").textContent=s.mid;
+  document.getElementById("eqHighV").textContent=s.high; document.getElementById("eqReverbV").textContent=s.reverb;
+  document.getElementById("eq3dV").textContent=s.d3; document.getElementById("eqWetV").textContent=s.wet;
+  setEQ();
+}
+/* 音效控件绑定 */
+(function bindEQ(){
+  document.getElementById("eqOrig").onclick = function(e){ if(e) e.stopPropagation(); ensureAudioGraph(); applyPreset("orig"); };
+  document.getElementById("eqD3").onclick = function(e){ if(e) e.stopPropagation(); ensureAudioGraph(); applyPreset("d3"); };
+  document.getElementById("eqSur").onclick = function(e){ if(e) e.stopPropagation(); ensureAudioGraph(); applyPreset("sur"); };
+  document.getElementById("eqPhone").onclick = function(e){ if(e) e.stopPropagation(); ensureAudioGraph(); applyPreset("phone"); };
+  [["eqLow","eqLowV"],["eqMid","eqMidV"],["eqHigh","eqHighV"],["eqReverb","eqReverbV"],["eq3d","eq3dV"],["eqWet","eqWetV"]].forEach(function(pair){
+    var id = pair[0], v = document.getElementById(pair[1]);
+    document.getElementById(id).addEventListener("input", function(){
+      ensureAudioGraph();
+      eqState[id.replace("eq","").toLowerCase()] = parseInt(this.value, 10);
+      v.textContent = this.value;
+      if(id === "eq3d"){ surroundOn = eqState.d3 >= 40; if(!surroundOn) eqN.pan && (eqN.pan.pan.value = 0); }
+      setEQ();
+    });
+  });
+  /* 注意：默认不接管 audio（直连扬声器，保证有声）；接管只发生在用户主动调音效时 */
+})();
+
+/* ================= 进入：AI 先点一首（播放中的歌播完才轮换） ================= */
+setTurn();
+setTimeout(function(){ aiPick(); }, 400);
+
+/* ================= GooseHyperGlass 液态玻璃控件联动（开源项目，纯 WebGL 真折射） ================= */
+(function initGlass(){
+  if (window.__lgOk !== true) return;
+  var seekLg = document.getElementById("seekLg");
+  var exUserLg = document.getElementById("exUserLg");
+  var exAiLg = document.getElementById("exAiLg");
+  var sendLg = document.getElementById("sendLg");
+  var seekProg = false;
+
+  /* 玻璃 → 页面 */
+  document.addEventListener("lg-statechange", function(e){
+    var el = e.target, d = e.detail || {};
+    if(!el || !d) return;
+    if(d.sliderValue !== undefined && el === seekLg && audio.duration){
+      seekProg = true;
+      audio.currentTime = audio.duration * (d.sliderValue / 100);
+      renderFill();
+      setTimeout(function(){ seekProg = false; }, 250);
+    }
+    if(d.toggleOn !== undefined){
+      if(el === exUserLg) setExcludeUser(!!d.toggleOn);
+      else if(el === exAiLg) setExcludeAi(!!d.toggleOn);
+    }
+  });
+
+  /* 页面 → 玻璃（播放进度实时同步滑块） */
+  function syncSeek(){
+    if(!seekLg || seekProg || !audio.duration) return;
+    var p = Math.min(100, Math.max(0, (audio.currentTime / audio.duration) * 100));
+    try { seekLg.setState({ sliderValue: p }); } catch(e){}
+  }
+
+  /* 背景绑定：所有液态玻璃控件都必须有折射目标，否则一片黑（库的 wallpaper 机制）。
+     必须在渲染器就绪前就设置好，否则会被当作无效背景丢弃 */
+  function bindWallpaper(){
+    document.querySelectorAll("liquid-glass").forEach(function(el){
+      try { el.setAttribute("wallpaper", LG_WALLPAPER); } catch(e){}
+    });
+  }
+  bindWallpaper();
+
+  /* 玻璃按钮组（GooseHyperGlass buttons 模式）。关键：渲染器是异步就绪的，
+     setButtons 必须延迟到渲染器启动后再调用（双 rAF），否则被吞掉，
+     玻璃会变成无交互的透明覆盖层拦截底层按钮点击 —— 与 MJ 播放器 initSendGlass 一致 */
+  var BTN_IDS = ["prevLg","playLg","nextLg","searchLg","sendLg"];
+  var cfgTries = 0;
+  function cfgButtons(){
+    var conf = {
+      prevLg:   [{ id:"prev",   label:"", style:"surface" }],
+      playLg:   [{ id:"play",   label:"", style:"transparent" }],
+      nextLg:   [{ id:"next",   label:"", style:"surface" }],
+      searchLg: [{ id:"search", label:"", style:"surface" }],
+      sendLg:   [{ id:"send",   label:"", style:"blue" }]
+    };
+    var okAll = true;
+    BTN_IDS.forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el) return;
+      try { el.setButtons(conf[id]); } catch(e){ okAll = false; }
+    });
+    cfgTries++;
+    /* 渲染器就绪标志：liquid-glass 内部出现 canvas */
+    var ready = document.querySelectorAll("liquid-glass canvas").length > 0;
+    if(!ready && cfgTries < 30){ setTimeout(cfgButtons, 120); return; }
+    if(!ready){
+      /* 兜底：玻璃按钮始终没生效 —— 让点击穿透到底层普通按钮（#doSearch 等） */
+      BTN_IDS.forEach(function(id){
+        var el = document.getElementById(id);
+        if(el) el.style.pointerEvents = "none";
+      });
+    }
+  }
+  requestAnimationFrame(function(){ requestAnimationFrame(cfgButtons); });
+
+  /* 玻璃按钮点击：用 e.target.id 判断（与 MJ 播放器 lg-buttontap 一致，不依赖 detail 结构） */
+  document.addEventListener("lg-buttontap", function(e){
+    var el = e.target;
+    if(!el) return;
+    var eid = el.id || "";
+    var bid = e.detail && e.detail.id;
+    if(eid === "sendLg" && bid === "send") sendChat();
+    else if(eid === "prevLg" && bid === "prev") notice("一首一首播，播完才轮到下一位");
+    else if(eid === "playLg" && bid === "play") { if(currentIdx >= 0){ if(audio.paused) audio.play(); else audio.pause(); } }
+    else if(eid === "nextLg" && bid === "next") nextTurn();
+    else if(eid === "searchLg" && bid === "search") doSearch();
+  });
+})();
+</script>
+</body>
+</html>
